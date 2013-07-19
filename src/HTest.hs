@@ -4,7 +4,6 @@ module Main where
 
 import Control.Monad
 import Development.Cake3
-import Development.Cake3.QQ
 
 cflags = var "CFLAGS" "-O0 -g3"
 
@@ -22,7 +21,8 @@ elf = do
 ------------------------------------
 
 (.=) :: FilePath -> String -> FilePath
-(.=) src newext = src
+(.=) src newext = src ++ newext
 
 top :: FilePath -> FilePath
 top x = x
+
