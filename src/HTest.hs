@@ -12,11 +12,11 @@ cfiles = [ top "main.c", top "second.c" ]
 ofiles = do
   forM cfiles $ \c -> do
     rule (c .= "o") $ do
-      [make| "gcc $cflags -o $dst $c" |]
+      [make| gcc $cflags -o $dst $c |]
 
 elf = do
   rule (top "main.elf") $ do
-    [make| "ld -o $dst $ofiles" |]
+    [make| ld -o $dst $ofiles |]
 
 ------------------------------------
 

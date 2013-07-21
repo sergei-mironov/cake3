@@ -29,8 +29,14 @@ import Language.Haskell.Meta (parseExp)
 
 type Command = String
 
+class ToMake x where
+  toMake :: x -> [String]
+
 data Variable = Variable { vname :: String, vval :: String }
   deriving(Show, Eq, Ord)
+
+instance ToMake Variable where
+  toMake (Variable n v) = [printf "%s = %s" n v]
 
 data Rule = Rule
   { rtgt :: FilePath
@@ -39,7 +45,20 @@ data Rule = Rule
   , rvars :: Map String (Set Variable)
   } deriving(Show, Eq, Ord)
 
+instance ToMake Rule where
+  toMake r = hdr : cmds where
+    hdr = printf "%s : %s" (rtgt r) (L.intercalate " " (rsrc r))
+    cmds = L.map ("\t" ++) (rcmd r)
+
 type Rules = Map FilePath (Set Rule)
+
+rules2vars :: Rules -> Map String (Set Variable)
+rules2vars rules = M.unionsWith mappend (L.map rvars $ L.concat $ L.map S.toList (L.map snd $ M.toList rules))
+
+rulesToMake :: Rules -> String
+rulesToMake rules = L.unlines $ (L.concat $ L.map toMake vs) ++  (L.concat $ L.map toMake rs) where 
+  vs = L.concat $ L.map S.toList $ L.map snd $ M.toList $ rules2vars rules
+  rs = L.concat $ L.map S.toList $ L.map snd $ M.toList rules
 
 newtype Make a = Make { unMake :: (StateT Rules IO) a }
   deriving(Monad, Functor, Applicative, MonadState Rules, MonadIO)
@@ -76,8 +95,6 @@ var n v = do
 dst :: A FilePath
 dst = rtgt <$> get
 
-
-
 class Ref x where
   ref :: x -> A Text
 
@@ -85,10 +102,14 @@ instance Ref Variable where
   ref (Variable n _) = return $ T.pack $ printf "$(%s)" n
 
 instance Ref FilePath where
-  ref f = return $ T.pack f
+  ref f = do
+    modify $ \r -> r { rsrc = f : (rsrc r)}
+    return $ T.pack f
 
 instance Ref Rule where
-  ref r = return $ T.pack $ rtgt r
+  ref r = do
+    modify $ \r' -> r' { rsrc = (rtgt r) : (rsrc r')}
+    return $ T.pack $ rtgt r
 
 instance Ref x => Ref [x] where
   ref l = sequence (L.map ref l) >>= return . T.intercalate " "
