@@ -34,13 +34,13 @@ import Language.Haskell.Meta (parseExp)
 type Command = String
 
 class ToMake x where
-  toMake :: x -> [String]
+  toMake :: x -> String
 
 data Variable = Variable { vname :: String, vval :: String }
   deriving(Show, Eq, Ord)
 
 instance ToMake Variable where
-  toMake (Variable n v) = [printf "%s = %s" n v]
+  toMake (Variable n v) = printf "%s = %s" n v
 
 data Rule = Rule
   { rtgt :: FilePath
@@ -51,27 +51,36 @@ data Rule = Rule
   } deriving(Show, Eq, Ord)
 
 instance ToMake Rule where
-  toMake r = hdr : cmds where
+  toMake r = unlines (hdr : cmds) where
     hdr = printf "%s : %s # %s" (rtgt r) (L.intercalate " " (rsrc r)) (rloc r)
     cmds = L.map ("\t" ++) (rcmd r)
 
 type Rules = Map FilePath (Set Rule)
 
 
+collapse' :: (Ord y) => Map String (Set y) -> (Uniq y, [String])
+collapse' m = asUniq $ foldr check1 mempty $ M.toList m where
+  check1 (k,s) (ss,es) | S.size s == 1 = (s`S.union`ss, es)
+                       | otherwise = (ss, (printf "several values for key %s" k):es)
+  asUniq (s,e) = (Uniq (S.toList s), e)
 
--- collapse :: Map x (Set y) -> ([y], [String])
--- collapse m = map check1 $ map snd $ M.toList m where
---   check1 s | S.size s == 1 = s
---            | otherwise = k
+newtype Uniq s = Uniq [s] deriving(Show)
 
 
-rules2vars :: Rules -> Map String (Set Variable)
-rules2vars rules = M.unionsWith mappend (map rvars $ concat $ map S.toList (map snd $ M.toList rules))
+collapseRules :: Rules -> (Uniq Rule, [String])
+collapseRules rs = collapse' rs
+
+collapseVars :: Uniq Rule -> (Uniq Variable, [String])
+collapseVars (Uniq rs) = collapse' $ (M.unionsWith mappend) $ map rvars rs
+
+collapse :: Rules -> (Uniq Variable, Uniq Rule, [String])
+collapse tree = (vs, rs, e1++e2) where
+  (rs, e1) = collapseRules tree
+  (vs, e2) = collapseVars rs
 
 rulesToMake :: Rules -> String
-rulesToMake rules = L.unlines $ (concat $ map toMake vs) ++  (concat $ map toMake rs) where 
-  vs = concat $ map S.toList $ map snd $ M.toList $ rules2vars rules
-  rs = concat $ map S.toList $ map snd $ M.toList rules
+rulesToMake tree = unlines $ (map toMake vs) ++ (map toMake rs) where
+  (Uniq vs, Uniq rs, es) = collapse tree
 
 newtype Make a = Make { unMake :: (StateT Rules IO) a }
   deriving(Monad, Functor, Applicative, MonadState Rules, MonadIO)
@@ -84,8 +93,6 @@ addRule r = modify $ M.insertWith mappend (rtgt r) (S.singleton r)
 -- 
 -- instance MonadLoc (Make) where
 --     withLoc loc (mk) = do
---     
---     
 --     EMT $ do
 --                      current <- withLoc loc emt
 --                      case current of
