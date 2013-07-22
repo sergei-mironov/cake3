@@ -15,7 +15,11 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 library
-  -- exposed-modules:     
+  exposed-modules:     Development.Cake3
   -- other-modules:       
-  build-depends:       base ==4.6.*
+  build-depends:       base ==4.6.*, haskell-src-meta, template-haskell,
+                       QuasiText, filepath, containers, text, monadloc, mtl
   hs-source-dirs:      src
+
+
+
