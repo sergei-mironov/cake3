@@ -133,8 +133,8 @@ rule dst act = do
 
 modifyRule = modify
 
-sys :: String -> Command -> A ()
-sys _ s = modifyRule (\r -> r { rcmd = (s : rcmd r) })
+sys :: Command -> A ()
+sys s = modifyRule (\r -> r { rcmd = (s : rcmd r) })
 
 var :: String -> String -> A Variable
 var n v = do
@@ -142,11 +142,16 @@ var n v = do
   modifyRule (\r -> r { rvars = M.insertWith mappend n (S.singleton var) (rvars r) })
   return var
 
-dst :: A FilePath
-dst = rtgt <$> get
+newtype SelfRef x = SelfRef x
+
+dst :: A (SelfRef FilePath)
+dst = SelfRef <$> rtgt <$> get
 
 class Ref x where
   ref :: x -> A Text
+
+instance Ref (SelfRef FilePath) where
+  ref (SelfRef f) = return $ T.pack f
 
 instance Ref Variable where
   ref (Variable n _) = return $ T.pack $ printf "$(%s)" n
@@ -170,11 +175,6 @@ instance Ref x => Ref (A x) where
 instance Ref x => Ref (Make x) where
   ref mx = (A $ lift mx) >>= ref
 
-formatLoc :: Loc -> String
-formatLoc loc = let file = loc_filename loc
-                    (line, col) = loc_start loc
-                in concat [file, ":", show line, ":", show col]
-
 make :: QuasiQuoter
 make = QuasiQuoter
   { quotePat  = undefined
@@ -188,10 +188,6 @@ make = QuasiQuoter
                                 Left  e -> error e
                                 Right e -> appE [| ref |] (return e)
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
-      in do
-        loc <- location
-        appE
-          (appE [| (\l loc -> T.unpack <$> T.concat <$> (sequence l) >>= sys loc ) |] (listE chunks))
-          (stringE $ formatLoc loc)
+      in appE [| (\l -> T.unpack <$> T.concat <$> (sequence l) >>= sys) |] (listE chunks)
   }
 
