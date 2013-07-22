@@ -1,9 +1,11 @@
+{-# OPTIONS_GHC -F -pgmF MonadLoc #-}
 {-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 module Main where
 
 import Control.Monad
 import Development.Cake3
+import Control.Monad.Loc
 
 cflags = var "CFLAGS" "-O0 -g3"
 

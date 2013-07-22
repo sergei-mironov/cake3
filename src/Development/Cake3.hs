@@ -12,6 +12,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Writer
 import Control.Monad.State
+import Control.Monad.Loc
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.List as L
@@ -82,13 +83,28 @@ rulesToMake :: Rules -> String
 rulesToMake tree = unlines $ (map toMake vs) ++ (map toMake rs) where
   (Uniq vs, Uniq rs, es) = collapse tree
 
-newtype Make a = Make { unMake :: (StateT Rules IO) a }
-  deriving(Monad, Functor, Applicative, MonadState Rules, MonadIO)
+type Location = String
+
+type MakeState = (Rules,Location)
+
+newtype Make a = Make { unMake :: (StateT MakeState IO) a }
+  deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
 runMake :: Make a -> IO Rules
-runMake mk = snd <$> runStateT (unMake mk) M.empty
+runMake mk = fst <$> snd <$> runStateT (unMake mk) mempty
 
-addRule r = modify $ M.insertWith mappend (rtgt r) (S.singleton r)
+addRule r = modifyRules $ M.insertWith mappend (rtgt r) (S.singleton r)
+
+modifyRules f = modify $ \(r,l) -> (f r,l)
+
+modifyLoc f = modify $ \(r,l) -> (r,f l)
+
+getLoc :: Make String
+getLoc = snd <$> get
+
+instance MonadLoc Make where
+  withLoc l' (Make um) = Make $ do
+    modifyLoc (\l -> l') >> um
 
 -- 
 -- instance MonadLoc (Make) where
@@ -109,18 +125,21 @@ execA r a = snd <$> runA r a
 
 rule :: FilePath -> A () -> Make Rule
 rule dst act = do
-  let r = Rule dst [] [] M.empty []
+  loc <- getLoc
+  let r = Rule dst [] [] M.empty loc
   r' <- execA r $ act
   addRule r'
   return r'
 
+modifyRule = modify
+
 sys :: String -> Command -> A ()
-sys l s = modify (\r -> r { rcmd = (s : rcmd r), rloc = l })
+sys _ s = modifyRule (\r -> r { rcmd = (s : rcmd r) })
 
 var :: String -> String -> A Variable
 var n v = do
   let var = Variable n v
-  modify (\r -> r { rvars = M.insertWith mappend n (S.singleton var) (rvars r) })
+  modifyRule (\r -> r { rvars = M.insertWith mappend n (S.singleton var) (rvars r) })
   return var
 
 dst :: A FilePath
@@ -134,12 +153,12 @@ instance Ref Variable where
 
 instance Ref FilePath where
   ref f = do
-    modify $ \r -> r { rsrc = f : (rsrc r)}
+    modifyRule $ \r -> r { rsrc = f : (rsrc r)}
     return $ T.pack f
 
 instance Ref Rule where
   ref r = do
-    modify $ \r' -> r' { rsrc = (rtgt r) : (rsrc r')}
+    modifyRule $ \r' -> r' { rsrc = (rtgt r) : (rsrc r')}
     return $ T.pack $ rtgt r
 
 instance Ref x => Ref [x] where
