@@ -5,7 +5,20 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE IncoherentInstances #-}
 
-module Development.Cake3 where
+module Development.Cake3 (
+    Rule
+  , rule
+  , Make
+  , A
+  , make
+  , var
+  , dst
+  , (.=)
+  , runMake
+  , ToMake(..)
+  , module System.FilePath
+  , module Control.Monad
+  ) where
 
 import Control.Applicative
 import Control.Monad
@@ -43,21 +56,37 @@ data Variable = Variable { vname :: String, vval :: String }
 instance ToMake Variable where
   toMake (Variable n v) = printf "%s = %s" n v
 
+newtype Escaped x = Escaped x
+  deriving(Show, Eq, Ord)
+
+escaped :: Escaped x -> x
+escaped (Escaped x) = x
+
+escape :: FilePath -> Escaped FilePath
+escape = Escaped . escfile' where
+  escfile' [] = []
+  escfile' (' ':cs) = "\\\\ " ++ escfile' cs
+  escfile' (x:cs) = x:escfile' cs
+
 data Rule = Rule
-  { rtgt :: FilePath
-  , rsrc :: [FilePath]
+  { rtgt' :: Escaped FilePath
+  , rsrc' :: [Escaped FilePath]
   , rcmd :: [Command]
   , rvars :: Map String (Set Variable)
   , rloc :: String
   } deriving(Show, Eq, Ord)
 
+rtgt = escaped . rtgt'
+rsrc = map escaped . rsrc'
+
+-- FIXME: implement http://stackoverflow.com/questions/11647859/make-targets-depend-on-variables
 instance ToMake Rule where
   toMake r = unlines (hdr : cmds) where
-    hdr = printf "%s : %s # %s" (rtgt r) (L.intercalate " " (rsrc r)) (rloc r)
+    hdr = printf "%s : %s %s # %s" (rtgt r) (L.intercalate " " (rsrc r)) (varf) (rloc r)
     cmds = L.map ("\t" ++) (rcmd r)
+    varf = intercalate " "  $ map escaped $ map (escape . vval) $ concat $ map S.toList $ map snd $ M.toList $ rvars r
 
 type Rules = Map FilePath (Set Rule)
-
 
 collapse' :: (Ord y) => Map String (Set y) -> (Uniq y, [String])
 collapse' m = asUniq $ foldr check1 mempty $ M.toList m where
@@ -66,7 +95,6 @@ collapse' m = asUniq $ foldr check1 mempty $ M.toList m where
   asUniq (s,e) = (Uniq (S.toList s), e)
 
 newtype Uniq s = Uniq [s] deriving(Show)
-
 
 collapseRules :: Rules -> (Uniq Rule, [String])
 collapseRules rs = collapse' rs
@@ -79,9 +107,9 @@ collapse tree = (vs, rs, e1++e2) where
   (rs, e1) = collapseRules tree
   (vs, e2) = collapseVars rs
 
-rulesToMake :: Rules -> String
-rulesToMake tree = unlines $ (map toMake vs) ++ (map toMake rs) where
-  (Uniq vs, Uniq rs, es) = collapse tree
+instance ToMake Rules where
+  toMake tree = unlines $ (map toMake vs) ++ (map toMake rs) where
+    (Uniq vs, Uniq rs, es) = collapse tree
 
 type Location = String
 
@@ -106,15 +134,6 @@ instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
     modifyLoc (\l -> l') >> um
 
--- 
--- instance MonadLoc (Make) where
---     withLoc loc (mk) = do
---     EMT $ do
---                      current <- withLoc loc emt
---                      case current of
---                        (Left (tr, a)) -> return (Left (loc:tr, a))
---                        _              -> return current
-
 newtype A a = A { unA :: StateT Rule Make a }
   deriving(Monad, Functor, Applicative, MonadState Rule, MonadIO)
 
@@ -126,7 +145,7 @@ execA r a = snd <$> runA r a
 rule :: FilePath -> A () -> Make Rule
 rule dst act = do
   loc <- getLoc
-  let r = Rule dst [] [] M.empty loc
+  let r = Rule (escape dst) [] [] M.empty loc
   r' <- execA r $ act
   addRule r'
   return r'
@@ -157,13 +176,19 @@ instance Ref Variable where
   ref (Variable n _) = return $ T.pack $ printf "$(%s)" n
 
 instance Ref FilePath where
-  ref f = do
-    modifyRule $ \r -> r { rsrc = f : (rsrc r)}
+  ref f' = do
+    let ef@(Escaped f) = escape f'
+    modifyRule $ \r -> r { rsrc' = ef : (rsrc' r)}
+    return $ T.pack f
+
+instance Ref (Escaped FilePath) where
+  ref ef@(Escaped f) = do
+    modifyRule $ \r -> r { rsrc' = ef : (rsrc' r)}
     return $ T.pack f
 
 instance Ref Rule where
   ref r = do
-    modifyRule $ \r' -> r' { rsrc = (rtgt r) : (rsrc r')}
+    modifyRule $ \r' -> r' { rsrc' = (rtgt' r) : (rsrc' r')}
     return $ T.pack $ rtgt r
 
 instance Ref x => Ref [x] where
@@ -190,4 +215,8 @@ make = QuasiQuoter
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
       in appE [| (\l -> T.unpack <$> T.concat <$> (sequence l) >>= sys) |] (listE chunks)
   }
+
+
+(.=) :: FilePath -> String -> FilePath
+(.=) src newext = src ++ newext
 
