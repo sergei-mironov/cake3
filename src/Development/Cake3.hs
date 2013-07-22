@@ -12,10 +12,14 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Writer
 import Control.Monad.State
-import Data.Text as T
-import Data.List as L
-import Data.Map as M
-import Data.Set as S
+import qualified Data.Text as T
+import Data.Text (Text)
+import qualified Data.List as L
+import Data.List
+import qualified Data.Map as M
+import Data.Map (Map)
+import qualified Data.Set as S
+import Data.Set (Set)
 import Prelude as P
 import System.FilePath
 import System.IO
@@ -43,22 +47,31 @@ data Rule = Rule
   , rsrc :: [FilePath]
   , rcmd :: [Command]
   , rvars :: Map String (Set Variable)
+  , rloc :: String
   } deriving(Show, Eq, Ord)
 
 instance ToMake Rule where
   toMake r = hdr : cmds where
-    hdr = printf "%s : %s" (rtgt r) (L.intercalate " " (rsrc r))
+    hdr = printf "%s : %s # %s" (rtgt r) (L.intercalate " " (rsrc r)) (rloc r)
     cmds = L.map ("\t" ++) (rcmd r)
 
 type Rules = Map FilePath (Set Rule)
 
+
+
+-- collapse :: Map x (Set y) -> ([y], [String])
+-- collapse m = map check1 $ map snd $ M.toList m where
+--   check1 s | S.size s == 1 = s
+--            | otherwise = k
+
+
 rules2vars :: Rules -> Map String (Set Variable)
-rules2vars rules = M.unionsWith mappend (L.map rvars $ L.concat $ L.map S.toList (L.map snd $ M.toList rules))
+rules2vars rules = M.unionsWith mappend (map rvars $ concat $ map S.toList (map snd $ M.toList rules))
 
 rulesToMake :: Rules -> String
-rulesToMake rules = L.unlines $ (L.concat $ L.map toMake vs) ++  (L.concat $ L.map toMake rs) where 
-  vs = L.concat $ L.map S.toList $ L.map snd $ M.toList $ rules2vars rules
-  rs = L.concat $ L.map S.toList $ L.map snd $ M.toList rules
+rulesToMake rules = L.unlines $ (concat $ map toMake vs) ++  (concat $ map toMake rs) where 
+  vs = concat $ map S.toList $ map snd $ M.toList $ rules2vars rules
+  rs = concat $ map S.toList $ map snd $ M.toList rules
 
 newtype Make a = Make { unMake :: (StateT Rules IO) a }
   deriving(Monad, Functor, Applicative, MonadState Rules, MonadIO)
@@ -67,6 +80,17 @@ runMake :: Make a -> IO Rules
 runMake mk = snd <$> runStateT (unMake mk) M.empty
 
 addRule r = modify $ M.insertWith mappend (rtgt r) (S.singleton r)
+
+-- 
+-- instance MonadLoc (Make) where
+--     withLoc loc (mk) = do
+--     
+--     
+--     EMT $ do
+--                      current <- withLoc loc emt
+--                      case current of
+--                        (Left (tr, a)) -> return (Left (loc:tr, a))
+--                        _              -> return current
 
 newtype A a = A { unA :: StateT Rule Make a }
   deriving(Monad, Functor, Applicative, MonadState Rule, MonadIO)
@@ -78,13 +102,13 @@ execA r a = snd <$> runA r a
 
 rule :: FilePath -> A () -> Make Rule
 rule dst act = do
-  let r = Rule dst [] [] M.empty
+  let r = Rule dst [] [] M.empty []
   r' <- execA r $ act
   addRule r'
   return r'
 
-sys :: Command -> A ()
-sys s = modify (\r -> r { rcmd = s : rcmd r })
+sys :: String -> Command -> A ()
+sys l s = modify (\r -> r { rcmd = (s : rcmd r), rloc = l })
 
 var :: String -> String -> A Variable
 var n v = do
@@ -120,6 +144,11 @@ instance Ref x => Ref (A x) where
 instance Ref x => Ref (Make x) where
   ref mx = (A $ lift mx) >>= ref
 
+formatLoc :: Loc -> String
+formatLoc loc = let file = loc_filename loc
+                    (line, col) = loc_start loc
+                in concat [file, ":", show line, ":", show col]
+
 make :: QuasiQuoter
 make = QuasiQuoter
   { quotePat  = undefined
@@ -133,6 +162,10 @@ make = QuasiQuoter
                                 Left  e -> error e
                                 Right e -> appE [| ref |] (return e)
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
-      in appE [| (\l -> T.unpack <$> T.concat <$> (sequence l) >>= sys ) |] (listE chunks)
+      in do
+        loc <- location
+        appE
+          (appE [| (\l loc -> T.unpack <$> T.concat <$> (sequence l) >>= sys loc ) |] (listE chunks))
+          (stringE $ formatLoc loc)
   }
 
