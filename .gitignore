@@ -1,0 +1,9 @@
+*.swp
+*.o
+*.hi
+dist/*
+*.swo
+*.elf
+*.o
+*.co
+*.swn
