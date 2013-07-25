@@ -18,20 +18,21 @@ data Variable = Variable { vname :: String, vval :: String }
 newtype Escaped x = Escaped x
   deriving(Show, Eq, Ord)
 
-escaped :: Escaped x -> x
-escaped (Escaped x) = x
-
 escape :: FilePath -> Escaped FilePath
 escape = Escaped . escfile' where
   escfile' [] = []
   escfile' (' ':cs) = "\\\\ " ++ escfile' cs
   escfile' (x:cs) = x:escfile' cs
 
+newtype File = File (Escaped FilePath)
+  deriving(Show,Eq,Ord)
+
+unfile (File (Escaped x)) = x
 
 data Rule = 
   Rule {
-    rtgt' :: Escaped FilePath
-  , rsrc' :: [Escaped FilePath]
+    rtgt' :: [File]
+  , rsrc' :: [File]
   , rcmd :: [Command]
   , rvars :: Map String (Set Variable)
   , rloc :: String
@@ -39,17 +40,17 @@ data Rule =
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
 
-rtgt = escaped . rtgt'
-rsrc = map escaped . rsrc'
+rtgt = map unfile . rtgt'
+rsrc = map unfile . rsrc'
 
-type Rules = Map FilePath (Set Rule)
+type Rules = Map [File] (Set Rule)
 
 newtype Uniq s = Uniq [s] deriving(Show)
 
-collapse' :: (Ord y) => Map String (Set y) -> (Uniq y, [String])
+collapse' :: (Ord y, Show k) => Map k (Set y) -> (Uniq y, [String])
 collapse' m = asUniq $ foldr check1 mempty $ M.toList m where
   check1 (k,s) (ss,es) | S.size s == 1 = (s`S.union`ss, es)
-                       | otherwise = (ss, (printf "several values for key %s" k):es)
+                       | otherwise = (ss, (printf "several values for key %s" (show k)):es)
   asUniq (s,e) = (Uniq (S.toList s), e)
 
 collapseRules :: Rules -> (Uniq Rule, [String])

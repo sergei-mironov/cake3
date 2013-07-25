@@ -8,6 +8,8 @@
 module Development.Cake3 (
     Rule
   , rule
+  , File
+  , file'
   , Make
   , A
   , make
@@ -49,6 +51,8 @@ import Language.Haskell.Meta (parseExp)
 import Development.Cake3.Types
 import Development.Cake3.Writer
 
+file' x = File (escape x)
+
 type Location = String
 
 type MakeState = (Rules,Location)
@@ -56,10 +60,10 @@ type MakeState = (Rules,Location)
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
-runMake :: Make a -> IO Rules
-runMake mk = fst <$> snd <$> runStateT (unMake mk) mempty
+runMake :: [Alias] -> IO Rules
+runMake mks = fst <$> snd <$> runStateT (unMake (unalias mks)) mempty
 
-addRule r = modifyRules $ M.insertWith mappend (rtgt r) (S.singleton r)
+addRule r = modifyRules $ M.insertWith mappend (rtgt' r) (S.singleton r)
 
 modifyRules f = modify $ \(r,l) -> (f r,l)
 
@@ -80,21 +84,29 @@ runA r a = runStateT (unA a) r
 
 execA r a = snd <$> runA r a
 
-rule :: FilePath -> A () -> Make Rule
-rule dst act = do
+newtype Alias = Alias (File, Make Rule)
+
+alias :: [File] -> Make Rule -> [Alias]
+alias fs m = map (\f -> Alias (f,m)) fs
+
+unalias :: [Alias] -> Make [Rule]
+unalias as = sequence $ map (\(Alias (_,x)) -> x) as
+
+rule :: [File] -> A () -> [Alias]
+rule dst act = alias dst $ do
   loc <- getLoc
-  let r = Rule (escape dst) [] [] M.empty loc False
+  let r = Rule dst [] [] M.empty loc False
   r' <- execA r $ act
   addRule r'
   return r'
 
-phony :: String -> A () -> Make Rule
-phony dst act = do
-  loc <- getLoc
-  let r = Rule (escape dst) [] [] M.empty loc True
-  r' <- execA r $ act
-  addRule r'
-  return r'
+phony :: String -> A () -> [Alias]
+phony dst' act = let dst = [file' dst'] in alias dst $ do
+    loc <- getLoc
+    let r = Rule dst [] [] M.empty loc True
+    r' <- execA r $ act
+    addRule r'
+    return r'
 
 modifyRule = modify
 
@@ -106,7 +118,7 @@ cmd ma = do
   str <- ma
   modifyRule (\r -> r { rcmd = (str : rcmd r) })
 
-depend :: Make Rule -> A ()
+depend :: Alias -> A ()
 depend mr = ref mr >> return ()
 
 var :: String -> String -> A Variable
@@ -115,35 +127,28 @@ var n v = do
   modifyRule (\r -> r { rvars = M.insertWith mappend n (S.singleton var) (rvars r) })
   return var
 
-newtype SelfRef x = SelfRef x
-
-dst :: A (SelfRef FilePath)
-dst = SelfRef <$> rtgt <$> get
+dst :: A [FilePath]
+dst = rtgt <$> get
 
 class Ref x where
   ref :: x -> A Text
 
-instance Ref (SelfRef FilePath) where
-  ref (SelfRef f) = return $ T.pack f
-
 instance Ref Variable where
   ref (Variable n _) = return $ T.pack $ printf "$(%s)" n
 
-instance Ref FilePath where
-  ref f' = do
-    let ef@(Escaped f) = escape f'
-    modifyRule $ \r -> r { rsrc' = ef : (rsrc' r)}
-    return $ T.pack f
+instance Ref File where
+  ref f = do
+    modifyRule $ \r -> r { rsrc' = f : (rsrc' r)}
+    return $ T.pack $ unfile f
 
-instance Ref (Escaped FilePath) where
-  ref ef@(Escaped f) = do
-    modifyRule $ \r -> r { rsrc' = ef : (rsrc' r)}
-    return $ T.pack f
+instance Ref String where
+  ref s = do
+    return $ T.pack s
 
-instance Ref Rule where
-  ref r = do
-    modifyRule $ \r' -> r' { rsrc' = (rtgt' r) : (rsrc' r')}
-    return $ T.pack $ rtgt r
+instance Ref Alias where
+  ref (Alias (f,mr)) = A (lift mr) >> do
+    modifyRule $ \r' -> r' { rsrc' = f : (rsrc' r')}
+    return $ T.pack $ unfile f
 
 instance Ref x => Ref [x] where
   ref l = sequence (L.map ref l) >>= return . T.intercalate " "
@@ -170,6 +175,6 @@ make = QuasiQuoter
       in appE [| (\l -> T.unpack <$> T.concat <$> (sequence l) >>= sys) |] (listE chunks)
   }
 
-(.=) :: FilePath -> String -> FilePath
-(.=) src newext = src ++ newext
+(.=) :: File -> String -> File
+(.=) (File (Escaped src)) newext = (File (Escaped $ src ++ newext))
 

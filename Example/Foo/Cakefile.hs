@@ -22,6 +22,5 @@ elf = do
   rule (top </> "main.elf") $ do
     [make| ld -o $dst $ofiles $(L.ofiles cflags) |]
 
-
 main = do
   runMake elf >>= putStrLn . toMake
