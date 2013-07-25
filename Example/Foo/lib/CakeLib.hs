@@ -6,12 +6,12 @@ module CakeLib where
 import Control.Monad.Loc
 import Development.Cake3
 
-import Cakepath_Lib (top)
+import Cakepath_Lib (file)
 
-cfiles = map (top </>) [ "lib.c"]
+cfiles = map file [ "lib.c"]
 
 ofiles cf = do
   forM cfiles $ \c -> do
-    rule (c .= "o") $ do
-      [make| gcc $cf -o $dst $c |]
+    rule [c .= "o"] $ do
+      [make| gcc -c -I lib $cf -o $dst $c |]
 

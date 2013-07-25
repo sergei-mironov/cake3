@@ -1,6 +1,8 @@
 
 module Cakepath_Main where
 
-top :: FilePath
-top = "/root/"
+import Development.Cake3
+
+file :: FilePath -> File
+file x = file' x
 

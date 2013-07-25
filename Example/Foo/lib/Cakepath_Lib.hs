@@ -1,6 +1,7 @@
 
 module Cakepath_Lib where
 
-top :: FilePath
-top = "/root/"
+import Development.Cake3
 
+file :: FilePath -> File
+file x = file' ("lib/" ++ x)

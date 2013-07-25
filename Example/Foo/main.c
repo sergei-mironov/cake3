@@ -1,4 +1,5 @@
 #include "lib.h"
+#include <stdio.h>
 
 
 int main()
@@ -10,7 +11,7 @@ int main()
 
   ret = call_lib(&l);
 
-  printf("Hello, lib: ret %d handle %d str %s\n", ret, l->handle, l->str);
+  printf("Hello, lib: ret %d handle %d str %s\n", ret, l.handle, l.str);
 
   return 0;
 }
