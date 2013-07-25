@@ -24,3 +24,6 @@ elf = do
     [make| $(cc)ld -o $dst $ofiles |]
 
 
+all = do
+  phony "all" $ do
+    depend elf

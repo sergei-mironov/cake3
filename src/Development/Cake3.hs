@@ -15,9 +15,11 @@ module Development.Cake3 (
   , dst
   , (.=)
   , runMake
-  , ToMake(..)
+  , phony
+  , depend
   , module System.FilePath
   , module Control.Monad
+  , module Development.Cake3.Writer
   ) where
 
 import Control.Applicative
@@ -37,7 +39,6 @@ import Data.Set (Set)
 import Prelude as P
 import System.FilePath
 import System.IO
-import Text.Printf
 import Text.QuasiText
 import Text.Printf
 
@@ -45,71 +46,8 @@ import Language.Haskell.TH.Quote
 import Language.Haskell.TH
 import Language.Haskell.Meta (parseExp)
 
-type Command = String
-
-class ToMake x where
-  toMake :: x -> String
-
-data Variable = Variable { vname :: String, vval :: String }
-  deriving(Show, Eq, Ord)
-
-instance ToMake Variable where
-  toMake (Variable n v) = printf "%s = %s" n v
-
-newtype Escaped x = Escaped x
-  deriving(Show, Eq, Ord)
-
-escaped :: Escaped x -> x
-escaped (Escaped x) = x
-
-escape :: FilePath -> Escaped FilePath
-escape = Escaped . escfile' where
-  escfile' [] = []
-  escfile' (' ':cs) = "\\\\ " ++ escfile' cs
-  escfile' (x:cs) = x:escfile' cs
-
-data Rule = Rule
-  { rtgt' :: Escaped FilePath
-  , rsrc' :: [Escaped FilePath]
-  , rcmd :: [Command]
-  , rvars :: Map String (Set Variable)
-  , rloc :: String
-  } deriving(Show, Eq, Ord)
-
-rtgt = escaped . rtgt'
-rsrc = map escaped . rsrc'
-
--- FIXME: implement http://stackoverflow.com/questions/11647859/make-targets-depend-on-variables
-instance ToMake Rule where
-  toMake r = unlines (hdr : cmds) where
-    hdr = printf "%s : %s %s # %s" (rtgt r) (L.intercalate " " (rsrc r)) (varf) (rloc r)
-    cmds = L.map ("\t" ++) (rcmd r)
-    varf = intercalate " "  $ map escaped $ map (escape . vval) $ concat $ map S.toList $ map snd $ M.toList $ rvars r
-
-type Rules = Map FilePath (Set Rule)
-
-collapse' :: (Ord y) => Map String (Set y) -> (Uniq y, [String])
-collapse' m = asUniq $ foldr check1 mempty $ M.toList m where
-  check1 (k,s) (ss,es) | S.size s == 1 = (s`S.union`ss, es)
-                       | otherwise = (ss, (printf "several values for key %s" k):es)
-  asUniq (s,e) = (Uniq (S.toList s), e)
-
-newtype Uniq s = Uniq [s] deriving(Show)
-
-collapseRules :: Rules -> (Uniq Rule, [String])
-collapseRules rs = collapse' rs
-
-collapseVars :: Uniq Rule -> (Uniq Variable, [String])
-collapseVars (Uniq rs) = collapse' $ (M.unionsWith mappend) $ map rvars rs
-
-collapse :: Rules -> (Uniq Variable, Uniq Rule, [String])
-collapse tree = (vs, rs, e1++e2) where
-  (rs, e1) = collapseRules tree
-  (vs, e2) = collapseVars rs
-
-instance ToMake Rules where
-  toMake tree = unlines $ (map toMake vs) ++ (map toMake rs) where
-    (Uniq vs, Uniq rs, es) = collapse tree
+import Development.Cake3.Types
+import Development.Cake3.Writer
 
 type Location = String
 
@@ -145,7 +83,15 @@ execA r a = snd <$> runA r a
 rule :: FilePath -> A () -> Make Rule
 rule dst act = do
   loc <- getLoc
-  let r = Rule (escape dst) [] [] M.empty loc
+  let r = Rule (escape dst) [] [] M.empty loc False
+  r' <- execA r $ act
+  addRule r'
+  return r'
+
+phony :: String -> A () -> Make Rule
+phony dst act = do
+  loc <- getLoc
+  let r = Rule (escape dst) [] [] M.empty loc True
   r' <- execA r $ act
   addRule r'
   return r'
@@ -154,6 +100,14 @@ modifyRule = modify
 
 sys :: Command -> A ()
 sys s = modifyRule (\r -> r { rcmd = (s : rcmd r) })
+
+cmd :: A String -> A ()
+cmd ma = do
+  str <- ma
+  modifyRule (\r -> r { rcmd = (str : rcmd r) })
+
+depend :: Make Rule -> A ()
+depend mr = ref mr >> return ()
 
 var :: String -> String -> A Variable
 var n v = do
@@ -215,7 +169,6 @@ make = QuasiQuoter
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
       in appE [| (\l -> T.unpack <$> T.concat <$> (sequence l) >>= sys) |] (listE chunks)
   }
-
 
 (.=) :: FilePath -> String -> FilePath
 (.=) src newext = src ++ newext
