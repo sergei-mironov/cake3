@@ -13,15 +13,15 @@ Installing
 
   2. Download the Thirdcake
 
-       git clone http://github.com/grwlf/thirdcake
+         git clone http://github.com/grwlf/thirdcake
 
   3. Install dependencies
     
-       cabal install haskell-src-meta monadloc QuasiText
+         cabal install haskell-src-meta monadloc QuasiText
 
   3. Build it using Cabal from Platform
 
-       cd thirdcake
-       cabal configure && cabal install
+         cd thirdcake
+         cabal configure && cabal install
 
 
