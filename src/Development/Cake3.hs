@@ -11,14 +11,17 @@ module Development.Cake3 (
   , File
   , file'
   , Make
+  , MakeState
   , A
   , make
-  , var
+  , makevar
+  , extvar
   , dst
   , (.=)
   , runMake
   , phony
   , depend
+  , Development.Cake3.unsafe
   , module System.FilePath
   , module Control.Monad
   , module Development.Cake3.Writer
@@ -53,24 +56,21 @@ import Development.Cake3.Writer
 
 file' x = File (escape x)
 
-type Location = String
-
-type MakeState = (Rules,Location)
-
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
-runMake :: [Alias] -> IO Rules
-runMake mks = fst <$> snd <$> runStateT (unMake (unalias mks)) mempty
+runMake :: [Alias] -> IO MakeState
+runMake mks = execStateT (unMake (unalias mks)) mempty
 
 addRule r = modifyRules $ M.insertWith mappend (rtgt' r) (S.singleton r)
+addVar v =  modifyVars $ M.insertWith mappend (vname v) (S.singleton v)
 
-modifyRules f = modify $ \(r,l) -> (f r,l)
-
-modifyLoc f = modify $ \(r,l) -> (r,f l)
+modifyRules f = modify $ \ms -> ms { srules = f (srules ms) }
+modifyVars f = modify $ \ms -> ms { svars = f (svars ms) }
+modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
 
 getLoc :: Make String
-getLoc = snd <$> get
+getLoc = sloc <$> get
 
 instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
@@ -108,10 +108,16 @@ phony dst' act = let dst = [file' dst'] in alias dst $ do
     addRule r'
     return r'
 
+unsafe :: A () -> A ()
+unsafe action = do
+  r <- get
+  action
+  modifyRule $ \r' -> r' { rsrc' = rsrc' r, rvars = rvars r }
+
 modifyRule = modify
 
 sys :: Command -> A ()
-sys s = modifyRule (\r -> r { rcmd = (s : rcmd r) })
+sys s = modifyRule (\r -> r { rcmd = (rcmd r) ++ [s] })
 
 cmd :: A String -> A ()
 cmd ma = do
@@ -121,11 +127,17 @@ cmd ma = do
 depend :: Alias -> A ()
 depend mr = ref mr >> return ()
 
-var :: String -> String -> A Variable
+var :: String -> Maybe String -> Make Variable
 var n v = do
   let var = Variable n v
-  modifyRule (\r -> r { rvars = M.insertWith mappend n (S.singleton var) (rvars r) })
+  addVar var
   return var
+
+makevar :: String -> String -> Make Variable
+makevar n v = var n (Just v)
+
+extvar :: String -> Make Variable
+extvar n = var n Nothing
 
 dst :: A [FilePath]
 dst = rtgt <$> get
@@ -134,7 +146,9 @@ class Ref x where
   ref :: x -> A Text
 
 instance Ref Variable where
-  ref (Variable n _) = return $ T.pack $ printf "$(%s)" n
+  ref v@(Variable n _) = do
+    modifyRule $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
+    return $ T.pack $ printf "$(%s)" n
 
 instance Ref File where
   ref f = do

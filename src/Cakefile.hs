@@ -10,7 +10,9 @@ import Cakepath_Main (file)
 
 foodef = "-DFOO" :: String
 
-cc = var "CROSS_COMPILE" "arm-none-eabi-"
+cc = makevar "CROSS_COMPILE" "arm-none-eabi-"
+
+shell = extvar "SHELL"
 
 cflags = var "CFLAGS" "-O0 -g3"
 
@@ -22,6 +24,7 @@ ofiles = do
       [make| $(cc)gcc $foodef $cflags -o $dst $c |]
 
 [elf,elf2] = rule [file "main.elf", file "main2.elf" ] $ do
+    [make| echo "Shell value is $shell" |]
     [make| $(cc)ld -o $dst $ofiles |]
 
 all = do
