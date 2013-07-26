@@ -7,3 +7,4 @@ dist/*
 *.o
 *.co
 *.swn
+GUARD_*
