@@ -9,7 +9,7 @@ supported.
 Installing
 ==========
 
-  1. Install (Haskell Platform)[http://www.haskell.org/platform/]
+  1. Install [Haskell Platform](http://www.haskell.org/platform/)
 
   2. Download the Thirdcake
 
