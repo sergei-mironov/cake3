@@ -17,7 +17,8 @@ work well with declarative variables) and much more.
 Unfortunately, Make doesn't provide adequate solutions for a number of simple
 problems:
   
-  * Define a rule which generates several targets. Really,
+  * It is not that simple to rdefine a rule which generates several targets.
+    Really,
         
         out1 out2 : in1 in2
             foo in1 in2 -o1 out1 -o2 out2
