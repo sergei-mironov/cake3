@@ -17,7 +17,7 @@ work well with declarative variables) and much more.
 Unfortunately, Make doesn't provide adequate solutions for a number of simple
 problems:
   
-  * It is not that simple to rdefine a rule which generates several targets.
+  * It is not that simple to define a rule which generates several targets.
     Really,
         
         out1 out2 : in1 in2
@@ -31,7 +31,9 @@ problems:
         out : in
              foo $(FLAGS) -o $@ $^
 
-    will not be rebuilt if someone change FLAGS.
+    will not be rebuilt if someone change FLAGS. Hardly-trackable bugs can
+    appear if a part of a big project was built with one set of optimisation
+    flags and another part was mistakenly build with another set.
 
 
 Installing
