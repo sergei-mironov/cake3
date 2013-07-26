@@ -1,0 +1,5 @@
+#!/bin/sh
+
+
+echo "VAR = `cat $1`" >  defines.mk
+
