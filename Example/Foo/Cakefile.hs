@@ -5,7 +5,6 @@ module Main where
 
 import Control.Monad.Loc
 import Development.Cake3
-
 import Cakepath_Main (file)
 import qualified CakeLib as L
 
@@ -17,26 +16,23 @@ shell = extvar "SHELL"
 
 cfiles = map file [ "main.c"]
 
-ofiles = do
-  forM cfiles $ \c -> do
-    rule [c .= "o"] $ do
-      [make| gcc -I lib -c $cflags -o $dst $c |]
+ofiles = forM cfiles $ \c -> do
+  rule [c .= "o"] $ do
+    [make| gcc -I lib -c $cflags -o $dst $c |]
 
 allofiles = ofiles ++ (L.ofiles cflags)
 
-elf = do
-  rule [file "main.elf"] $ do
-    [make| echo "SHELL is $shell" |]
-    [make| gcc -o $dst $allofiles |]
-    [make| echo $sound |]
+elf = rule [file "main.elf"] $ do
+  [make| echo "SHELL is $shell" |]
+  [make| gcc -o $dst $allofiles |]
+  [make| echo $sound |]
 
-clean = do
-  phony "clean" $ do
+clean = phony "clean" $ do
     unsafe $ do
       [make| rm $elf ; rm GUARD_* ; rm $allofiles |]
 
-all = do
-  phony "all" $ depend (head elf)
+all = phony "all" $ do
+  depend (head elf)
 
 main = do
   runMake (Main.all ++ elf ++ clean) >>= putStrLn . toMake
