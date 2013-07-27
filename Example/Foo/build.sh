@@ -2,7 +2,13 @@
 
 set +x
 
-ghc -ilib --make Cakefile.hs && ./Cakefile | tee Makefile
+set -e
+
+ghc --make Cakefile.hs -main-is Cakefile
+
+./Cakefile > ./Makefile
+
+cat Makefile
 
 echo "Makefile created. Type make to compile"
 

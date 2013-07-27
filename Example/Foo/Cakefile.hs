@@ -5,7 +5,7 @@ module Cakefile where
 
 import Control.Monad.Loc
 import Development.Cake3
-import Cakepath_Main (file)
+import Cakefile_P (file)
 import qualified CakeLib as L
 
 -- Haskell-level variable
@@ -22,7 +22,15 @@ shell = extvar "SHELL"
 cfiles = map file [ "main.c"]
 
 -- Rules uses [make| ... |] syntax for quasy-quoting the references to other
--- entities of Cakefiles. It makes automatic dependency tracking possible.
+-- entities of Cakefiles. It makes automatic dependency tracking possible. rules
+-- function has a signature of
+--
+-- newtype Alias = Alias (File, Make Rule)
+--
+-- rule :: [File] -> A () -> [Alias]
+--
+-- Basically, rule returns list of Files, each File may be created by
+-- calculating a Rule in a Make monad.
 
 -- Rule for compiling files. Check resulting Makefile to see how variable guards
 -- are inserted. ofiles will be rebult is someone changes the CFLAGS
@@ -30,10 +38,10 @@ ofiles = forM cfiles $ \c -> do
   rule [c .= "o"] $ do
     [make| gcc -I lib -c $cflags -o $dst $c |]
 
--- Bring together objects from this unit and from Library
+-- Bring together objects from this unit and from the Lib library
 allofiles = ofiles ++ (L.ofiles cflags)
 
--- Rule for linker
+-- Rule for linker, not how various entities are referenced.
 elf = rule [file "main.elf"] $ do
   [make| echo "SHELL is $shell" |]
   [make| gcc -o $dst $allofiles |]
@@ -43,9 +51,9 @@ elf = rule [file "main.elf"] $ do
 -- variable guards. clean should just do what user tolds it to do. Thus, unsafe
 -- is used here.
 clean = phony "clean" $ unsafe $ do
-  [make| rm $elf ; rm GUARD_* ; rm $allofiles |]
+    [make| rm $elf ; rm GUARD_* ; rm $allofiles |]
 
--- All rule is just an alias for elf
+-- Rule named 'all' is just an alias for elf
 all = phony "all" $ do
   depend (head elf)
 

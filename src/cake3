@@ -1,0 +1,60 @@
+#!/bin/sh
+
+die() { echo "$@" >&2 ; exit 1 ; }
+
+cakepath() {
+cat <<EOF
+module ${1}_P where
+
+import Development.Cake3
+
+file :: FilePath -> File
+file x = file' ("$2" </> x)
+
+EOF
+}
+
+CWD=`pwd`
+T=`mktemp -d`
+
+cakes() {
+  find -type f -name 'Cake*' -and -not -name '*_P.hs' \
+    | grep -v '^\.[a-zA-Z].*' \
+    | grep '\.hs'
+}
+
+MAIN=
+for f in `cakes` ; do
+  tgt=$T/`basename $f`
+
+  if test "`dirname $f`" = "." ; then
+    if test -n "$MAIN" ; then
+      die 'Multiple Cake* files in current dir'
+    fi
+    MAIN=`basename $f .hs`
+  fi
+
+  cp $f $tgt ||
+    die "cp $f $tgt failed. Duplicate names?"
+
+  fname=`basename $f .hs`
+  fdir=`dirname $f`
+
+  if cat $f | grep -q "^import.*${fname}_P" ; then
+    echo "Creating $T/${fname}_P.hs" >&2
+    cakepath $fname $fdir > $T/${fname}_P.hs
+  else
+    echo "Skipping creating Cakepaths for $f" >&2
+  fi
+done
+
+(
+set -e
+cd $T
+ghc --make ${MAIN}.hs -main-is $MAIN -o Cakefile
+cp -t $CWD Cakefile
+$CWD/Cakefile > $CWD/Makefile
+echo "Makefile created" >&2
+)
+
+

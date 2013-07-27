@@ -108,6 +108,7 @@ phony dst' act = let dst = [file' dst'] in alias dst $ do
     addRule r'
     return r'
 
+-- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()
 unsafe action = do
   r <- get

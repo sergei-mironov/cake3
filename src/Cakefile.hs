@@ -14,7 +14,7 @@ cc = makevar "CROSS_COMPILE" "arm-none-eabi-"
 
 shell = extvar "SHELL"
 
-cflags = var "CFLAGS" "-O0 -g3"
+cflags = makevar "CFLAGS" "-O0 -g3"
 
 cfiles = map file [ "main.c", "second.c",  "space file.c"]
 
