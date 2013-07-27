@@ -35,8 +35,7 @@ so nearly all the computatinos should be done at Haskell level. However, as a
 reward, thirdcake protect the develper from a number of common make-specific
 mistakes.
 
-Features
-````````
+### Features
 
   * Rebuild a rule when variable changes. Consider following antipattern:
 
@@ -79,8 +78,7 @@ Features
     A/Cakefile.hs and do whatever you  want to, but resulting makefiles will
     always be monolitic.
 
-Limitations
-```````````
+### Limitations
 
   * Thirdcake doesn't support make-level includes. This is serious limitation,
     so I'm going to add that support ASAP.
