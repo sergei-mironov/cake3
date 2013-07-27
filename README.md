@@ -36,7 +36,7 @@ reward, thirdcake protect the develper from a number of common make-specific
 mistakes.
 
 Features
-~~~~~~~~
+````````
 
   * Rebuild a rule when variable changes. Consider following antipattern:
 
@@ -80,7 +80,7 @@ Features
     always be monolitic.
 
 Limitations
-~~~~~~~~~~~
+```````````
 
   * Thirdcake doesn't support make-level includes. This is serious limitation,
     so I'm going to add that support ASAP.
