@@ -33,7 +33,10 @@ be regenerated when environment modifications exceeds that level.
 Currently, the tool doesn't support pattern rules and variable-level functions
 so nearly all the computatinos should be done at Haskell level. However, as a
 reward, thirdcake protect the develper from a number of common make-specific
-mistakes:
+mistakes.
+
+Features
+~~~~~~~~
 
   * Rebuild a rule when variable changes. Consider following antipattern:
 
@@ -67,17 +70,30 @@ mistakes:
     own Makefiles and we want to re-use it in our global A/Makefile. Make
     provides only two ways of doing that. We could either include L/Makefile or
     call $(MAKE) -C L. First solution is a pain because we would probably merge
-    together to files with different current directory assumptions. Second
+    together two files with different current directory assumptions. Second
     approach is OK unless we need to pass additional paramters or depend on a
     specific rule from L.
 
     Thirdcake's approach in this case is a compromise: it uses standard Haskell
-    import mechanisms so it is possible to import L/Cakelib.hs from
+    import mechanism so it is possible to import L/Cakelib.hs from
     A/Cakefile.hs and do whatever you  want to, but resulting makefiles will
     always be monolitic.
 
-How does it works
------------------
+Limitations
+~~~~~~~~~~~
+
+  * Thirdcake doesn't support make-level includes. This is serious limitation,
+    so I'm going to add that support ASAP.
+  * No suuport for referencing a makefile-variable from within other variable.
+    Again, lack of time. On the TODO list.
+  * Resulting Makefile is actually a GNUMakefile. GNU extentions (shell function
+    and others) are needed to make variable-guard tricks to work.
+  * Coreutils package is required. Resulting Makefile uses md5sum and cut
+    programs, distributed with this package.
+
+
+How does it work
+----------------
 
 Thirdcake allows user to write Cakefile using a subset of Haskell (still,
 Cakefiles are normal Haskell programs) to define rules, targets and other stuff
