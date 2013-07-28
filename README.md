@@ -82,16 +82,16 @@ mistakes.
     problem
 
   * Makefiles hierarchy. Say, we have a project A with subproject L. L has it's
-    own Makefiles and we want to re-use it in our global A/Makefile. Make
+    own Makefile and we want to re-use it in our global A/Makefile. Make
     provides only two ways of doing that. We could either include L/Makefile or
     call $(MAKE) -C L. First solution is a pain because we would probably merge
     together two files with different current directory assumptions. Second
-    approach is OK unless we need to pass additional paramters or depend on a
-    specific rule from L.
+    approach is OK, but only if we don't need to pass additional paramters or
+    depend on a specific rule from L.
 
     Thirdcake's approach in this case is a compromise: it uses standard Haskell
-    import mechanism so it is possible to import L/Cakelib.hs from
-    A/Cakefile.hs and do whatever you  want to, but resulting makefiles will
+    import mechanism so it is possible to import L/Cakefile.hs from
+    A/Cakefile.hs and do whatever you want to, but resulting makefiles will
     always be monolitic.
 
 ### Limitations
@@ -118,8 +118,12 @@ targets and other stuff as usual. After that, `cake3` compiles it into Makefile
 
 Again, in more details:
 
-  1. User writes ./Cakefile.hs describing the rules. Rerer to
-     Example/Foo/Cakefile.hs
+  1. User writes a cakefile (./Cake\*.hs) describing the rules. Rerer to
+     Example/Foo/Cakefile.hs. Note, that different cakefiles should have
+     different names even if they are in different directories. It is due to
+     ghc's rules for import. User can import one cakefile from another, as the
+     are in the same directory. Actually, cake3 copies all cakefiles into one
+     temporary directory and compiles them there.
 
   2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
      produces Makefile. Note that cake3 expects ./Cakegen to print content of
