@@ -102,7 +102,7 @@ targets and other stuff as usual. After that, `cake3` compiles it into Makefile
 
 Again, in more details:
 
-  1. User Writes ./Cakefile.hs describing the rules. Rerer to
+  1. User writes ./Cakefile.hs describing the rules. Rerer to
      Example/Foo/Cakefile.hs
 
   2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
