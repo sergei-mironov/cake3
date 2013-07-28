@@ -90,8 +90,8 @@ mistakes.
     programs, distributed with this package.
 
 
-How does it work
-----------------
+How it works
+------------
 
 Thirdcake allows user to write Cakefile using a subset of Haskell (still,
 Cakefiles are normal Haskell programs) to define rules, targets and other stuff
