@@ -68,10 +68,9 @@ mistakes.
     [pattern](http://stackoverflow.com/a/17830736/1133157) from StackOverflow to
     detect changes in variables and rebuild targets when nessesary.
  
-  * A rule with multiple target problem.
+  * A rule with multiple targets
     
-    It is not that simple to explain to Make that a rule generates several
-    targets. Really,
+    It is not that simple to write a rule which has more than one target. Really,
         
         out1 out2 : in1 in2
             foo in1 in2 -o1 out1 -o2 out2
@@ -79,7 +78,8 @@ mistakes.
     is not corret. Read this [Automake
     article](http://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html#Multiple-Outputs)
     if you are surprised. Thirdcake implements [.INTERMEDIATE
-      pattern](http://stackoverflow.com/a/10609434/1133157) in such situations
+    pattern](http://stackoverflow.com/a/10609434/1133157) to deal with this
+    problem
 
   * Makefiles hierarchy. Say, we have a project A with subproject L. L has it's
     own Makefiles and we want to re-use it in our global A/Makefile. Make
