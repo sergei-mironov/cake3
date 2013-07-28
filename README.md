@@ -5,6 +5,21 @@ Thirdcake is a Makefile DSL written in Haskell. It can help you to define clean
 and correct Makefile for your project. Currenly, only GNU Make dialect is
 supported.
 
+Installing
+----------
+
+  1. Install [Haskell Platform](http://www.haskell.org/platform/)
+
+  2. Install dependencies
+    
+         cabal install haskell-src-meta monadloc QuasiText
+
+  3. Build the thirdcake from Github (Thirdcake is not ready for Hackage yet)
+
+         git clone http://github.com/grwlf/thirdcake
+         cd thirdcake
+         cabal configure && cabal install
+
 Why
 ---
 
@@ -114,27 +129,6 @@ Again, in more details:
   3. `make` can now be used to build the project. Note, that make knows how to
      update itself, so user doesn't have to run cake3 every time he or she
      changes ./Cakefile.hs.
-
-
-Installing
-----------
-
-  1. Install [Haskell Platform](http://www.haskell.org/platform/)
-
-  2. Install dependencies
-    
-         cabal install haskell-src-meta monadloc QuasiText
-
-  3. Build the thirdcake from Github (Thirdcake is not ready for Hackage yet)
-
-         git clone http://github.com/grwlf/thirdcake
-         cd thirdcake
-         cabal configure && cabal install
-
-Using
------
-
-Check Example/Foo/Cakefile
 
 
 
