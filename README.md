@@ -107,11 +107,13 @@ Again, in more details:
 
   2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
      produces Makefile. Note that cake3 expects ./Cakegen to print content of
-     the Makefile to it's standard output.
+     the Makefile to it's standard output. Also, cake3 creates ./Cakefile_P.hs
+     containing information about paths. Most important are _files_ function which
+     translates relative filename into `"." </> path_to_root </> filename`
 
   3. `make` can now be used to build the project. Note, that make knows how to
      update itself, so user doesn't have to run cake3 every time he or she
-     updates ./Cakefile.hs.
+     changes ./Cakefile.hs.
 
 
 Installing
