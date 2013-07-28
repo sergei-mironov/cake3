@@ -109,7 +109,7 @@ Again, in more details:
      produces Makefile. Note that cake3 expects ./Cakegen to print content of
      the Makefile to it's standard output. Also, cake3 creates ./Cakefile_P.hs
      containing information about paths. Most important are _files_ function which
-     translates relative filename into `"." </> path_to_root </> filename`
+     translates relative _filename_ into _"." </> path_to_root </> filename_
 
   3. `make` can now be used to build the project. Note, that make knows how to
      update itself, so user doesn't have to run cake3 every time he or she
