@@ -120,10 +120,10 @@ Again, in more details:
 
   1. User writes a cakefile (./Cake\*.hs) describing the rules. Rerer to
      Example/Foo/Cakefile.hs. Note, that different cakefiles should have
-     different names even if they are in different directories. It is due to
-     ghc's rules for import. User can import one cakefile from another, as the
-     are in the same directory. Actually, cake3 copies all cakefiles into one
-     temporary directory and compiles them there.
+     different names even if they are in different directories due to GHC import
+     restrictions. This way user can import one cakefile from another, as if
+     they were in the same directory. Actually, cake3 copies all cakefiles into
+     one temporary directory and compiles them there.
 
   2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
      produces Makefile. Note that cake3 expects ./Cakegen to print content of
