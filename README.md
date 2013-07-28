@@ -98,13 +98,13 @@ mistakes.
 
   * Thirdcake doesn't support make-level includes. This is serious limitation,
     so I'm going to add that support ASAP.
-  * No suuport for referencing a makefile-variable from within other variable.
+  * No support for referencing a makefile-variable from within other variable.
     Again, lack of time. On the TODO list.
   * Resulting Makefile is actually a GNUMakefile. GNU extentions (shell function
     and others) are needed to make variable-guard tricks to work.
-  * Coreutils package is required. Resulting Makefile uses md5sum and cut
-    programs, distributed with this package.
-
+  * Coreutils package is required because resulting Makefile calls md5sum and cut
+    programs.
+  * Cakefiles should have unique names (see below for more details)
 
 How it works
 ------------
