@@ -93,19 +93,21 @@ mistakes.
 How it works
 ------------
 
-Thirdcake allows user to write Cakefile.hs in plain Haskell to define rules,
-targets and other stuff as usual. When compiled with cake3 (ghc is required for
-that), ./Cakegen should be run in order to produce GNU Makefile, understandable
-by GNU make.
 
-Again, refer to Example/Foo/Cakefile.hs to see an example.
+Thirdcake allows user to write Cakefile.hs in plain Haskell to define rules,
+targets and other stuff as usual. After that, `cake3` compiles it into Makefile
+(ghc is required for that). At this point, make will do the rest.
+
+    vim Cakefile.hs >> cake3 >> repeat make
 
 Again, in more details:
 
-  1. User Writes ./Cakefile.hs describing the rules.
+  1. User Writes ./Cakefile.hs describing the rules. Rerer to
+     Example/Foo/Cakefile.hs
 
-  2. User executes cake3 which compiles ./Cakefile.hs into ./Cakegen and
-     produces Makefile
+  2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
+     produces Makefile. Note that cake3 expects ./Cakegen to print content of
+     the Makefile to it's standard output.
 
   3. `make` can now be used to build the project. Note, that make knows how to
      update itself, so user doesn't have to run cake3 every time he or she
