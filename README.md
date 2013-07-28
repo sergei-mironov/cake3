@@ -59,8 +59,8 @@ mistakes.
         out : in
              foo $(FLAGS) -o $@ $^
 
-    Unfortunately, changing FLAGS doesn't lead to rebuilding of out.
-    Hardly-trackable bugs may appear if a part of a project was built with one
+    Unfortunately, changes in FLAGS don't lead to rebuilding of out.
+    Hardly-trackable bugs may appear if one part of a project was built with one
     set of optimisation flags and another part was build with another set by
     mistake.
 
