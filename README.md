@@ -23,19 +23,20 @@ Installing
 Why
 ---
 
-Make is a build tool created more than 20 yesrs ago, it has a number of versions
-and dialects. Basic Makefiles are really easy to write and understand.
-Unfortunately, it is hard to write real-world scale rules set correctly due to
-tricky syntax and complex extentions. As of today, Make has automatic,
-declarative and imperative variables, builtin rules, pattern-rules, double-colon
-rules, C-style ifdefs (which doesn't work well with declarative variables) and
-many many other strange things. Nevertheless, it is still widely used as a
-de-facto standard build tool which everyone has access to.
+Make is a build tool which was created more than 20 yesrs ago. It has a number
+of versions and dialects. Basic Makefiles are really easy to write and
+understand.  Unfortunately, it is hard to write real-world scale set of rules
+correctly due to tricky syntax and lots of pitfails. As of today, Make has
+automatic, declarative and imperative variables, builtin rules, pattern-rules,
+double-colon rules, C-style ifdefs (which doesn't work well with declarative
+variables) and lots of other strange things. Nevertheless, it is still widely
+used as a de-facto standard tool which everyone has access to.
 
-So the goal of Thirdcake is to provide a tool which would allow the developer to
+The goals of Thirdcake are to help the developer to:
 
-  * Write Makefiles which could be distributed to the end users as is
-  * Be sure that my Makefiles do right things
+  * Stop overusing Make by removing build-logic from Makefile into more sutable
+    language
+  * Still have a correct Makefile which could be distributed to endusers
   * Take a bit of Haskell practice :)
 
 Features and limitations
