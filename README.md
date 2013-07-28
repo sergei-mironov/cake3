@@ -55,7 +55,7 @@ mistakes.
 
   * Rebuild a rule when variable changes. Consider following antipattern:
 
-        # You often write rules like this, doesn't you?
+        # You often write rules like this, don't you?
         out : in
              foo $(FLAGS) -o $@ $^
 
