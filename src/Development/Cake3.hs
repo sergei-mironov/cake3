@@ -7,6 +7,7 @@
 
 module Development.Cake3 (
     Rule
+  , Alias
   , rule
   , File
   , file'
@@ -59,10 +60,13 @@ file' x = File (escape x)
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
+-- FIXME: reverse is a quick hack for generating (head mks) first. See also
+-- counter-reverse in Writer :)
 runMake :: [Alias] -> IO MakeState
-runMake mks = execStateT (unMake (unalias mks)) mempty
+runMake mks = execStateT (unMake (unalias $ reverse mks)) defMS
 
-addRule r = modifyRules $ M.insertWith mappend (rtgt' r) (S.singleton r)
+addRule r = getPos >>= \p -> modifyRules $ M.insertWith mappend (rtgt' r) (Positioned p $ S.singleton r)
+
 addVar v =  modifyVars $ M.insertWith mappend (vname v) (S.singleton v)
 
 modifyRules f = modify $ \ms -> ms { srules = f (srules ms) }
@@ -71,6 +75,11 @@ modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
 
 getLoc :: Make String
 getLoc = sloc <$> get
+
+getPos = do
+  p <- spos <$> get
+  modify $ \ms -> ms { spos = p + 1 }
+  return p
 
 instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
@@ -125,8 +134,8 @@ cmd ma = do
   str <- ma
   modifyRule (\r -> r { rcmd = (str : rcmd r) })
 
-depend :: Alias -> A ()
-depend mr = ref mr >> return ()
+depend :: (Ref x) => x -> A ()
+depend x = ref x >> return ()
 
 var :: String -> Maybe String -> Make Variable
 var n v = do

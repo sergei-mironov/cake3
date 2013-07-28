@@ -10,6 +10,16 @@ import Data.Set (Set)
 import System.FilePath
 import Text.Printf
 
+data Positioned a = Positioned { ppos :: Int, pwhat :: a }
+  deriving(Show,Eq,Ord)
+
+instance Monoid a => Monoid (Positioned a) where
+  mempty = Positioned 0 mempty
+  mappend (Positioned a ad) (Positioned b bd) = Positioned (min a b) (mappend ad bd)
+
+cmpPos (Positioned a _) (Positioned b _) = a`compare`b
+unposition (Positioned _ x) = x
+
 type Command = String
 
 data Variable = Variable { vname :: String, vval :: Maybe String }
@@ -45,7 +55,7 @@ data Rule =
 rtgt = map unfile . rtgt'
 rsrc = map unfile . rsrc'
 
-type Rules = Map [File] (Set Rule)
+type Rules = Map [File] (Positioned (Set Rule))
 
 newtype Uniq s = Uniq [s] deriving(Show)
 
@@ -55,17 +65,12 @@ collapse m = asUniq $ foldr check1 mempty $ M.toList m where
                        | otherwise = (ss, (printf "several values for key %s" (show k)):es)
   asUniq (s,e) = (Uniq (S.toList s), e)
 
--- collapseRules :: Rules -> (Uniq Rule, [String])
--- collapseRules rs = collapse' rs
--- 
--- collapseVars :: Uniq Rule -> (Uniq Variable, [String])
--- collapseVars (Uniq rs) = collapse' $ (M.unionsWith mappend) $ map rvars rs
--- 
--- collapse :: Rules -> (Uniq Variable, Uniq Rule, [String])
--- collapse tree = (vs, rs, e1++e2) where
---   (rs, e1) = collapseRules tree
---   (vs, e2) = collapseVars rs
-
+-- FIXME: simplify the code. One needn't two almost similar collapses
+collapseP :: (Ord y, Show k) => Map k (Positioned (Set y)) -> (Uniq y, [String])
+collapseP m = asUniq $ foldr check1 mempty $ M.toList m where
+  check1 (k,p@(Positioned pos s)) (ss,es) | S.size s == 1 = ((Positioned pos (head $ S.toList s)):ss, es)
+                                        | otherwise = (ss, (printf "several values for key %s" (show k)):es)
+  asUniq (ps,e) = (Uniq (map unposition $ sortBy cmpPos ps), e)
 
 type Location = String
 
@@ -73,10 +78,8 @@ data MakeState = MS {
     srules :: Rules
   , svars :: Vars
   , sloc :: Location
+  , spos :: Int
   } deriving(Show)
 
-instance Monoid MakeState where
-  mempty = MS mempty mempty mempty
-  mappend (MS a b c) (MS a' b' c') = MS (a`mappend`a') (b`mappend`b') (c`mappend`c')
-
+defMS = MS mempty mempty mempty 0
 

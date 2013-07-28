@@ -1,11 +1,9 @@
-{-# OPTIONS_GHC -F -pgmF MonadLoc #-}
 {-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 module Cakefile where
 
-import Control.Monad.Loc
 import Development.Cake3
-import Cakefile_P (file)
+import Cakefile_P (file,cakefiles)
 import qualified CakeLib as L
 
 -- Haskell-level variable
@@ -33,15 +31,23 @@ cfiles = map file [ "main.c"]
 -- calculating a Rule in a Make monad.
 
 -- Rule for compiling files. Check resulting Makefile to see how variable guards
--- are inserted. ofiles will be rebult is someone changes the CFLAGS
-ofiles = forM cfiles $ \c -> do
+-- are inserted. ofiles will be rebult is someone changes the CFLAGS. Note, that
+-- this particluar rule is written as List monad.
+--
+-- $dst reference is a bit special. It is a function defined in
+-- Development.Cake3 which expands into space-separated list of current targets
+ofiles :: [Alias]
+ofiles = do 
+  c <- cfiles
   rule [c .= "o"] $ do
     [make| gcc -I lib -c $cflags -o $dst $c |]
 
 -- Bring together objects from this unit and from the Lib library
+allofiles :: [Alias]
 allofiles = ofiles ++ (L.ofiles cflags)
 
 -- Rule for linker, not how various entities are referenced.
+elf :: [Alias]
 elf = rule [file "main.elf"] $ do
   [make| echo "SHELL is $shell" |]
   [make| gcc -o $dst $allofiles |]
@@ -50,15 +56,24 @@ elf = rule [file "main.elf"] $ do
 -- Clean is a special rule in a sence that it doesn't use dependencies or
 -- variable guards. clean should just do what user tolds it to do. Thus, unsafe
 -- is used here.
+clean :: [Alias]
 clean = phony "clean" $ unsafe $ do
-    [make| rm $elf ; rm GUARD_* ; rm $allofiles |]
+    [make| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
 
 -- Rule named 'all' is just an alias for elf
 all = phony "all" $ do
-  depend (head elf)
+  depend elf
 
--- Finally, Haskell main function collects all required rules and prints the
+-- Self-update rules: rebuild Makefile if Cakefiles changes
+cakegen = rule [file "Cakegen" ] $ do
+  depend cakefiles
+  [make| cake3 |]
+
+selfupdate = rule [file "Makefile"] $ do
+  [make| $cakegen > $dst |]
+
+-- Finally, default Haskell main function collects all required rules and prints the
 -- Makefile's contents on a standard output
 main = do
-  runMake (Cakefile.all ++ elf ++ clean) >>= putStrLn . toMake
+  runMake (Cakefile.all ++ elf ++ clean ++ selfupdate ) >>= putStrLn . toMake
 

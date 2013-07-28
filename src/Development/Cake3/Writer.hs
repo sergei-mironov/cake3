@@ -26,7 +26,9 @@ type MakeWriter a = State WS a
 
 toMake ms =
   let (Uniq vs, e1) = collapse (svars ms)
-      (Uniq rs, e2) = collapse (srules ms)
+      (Uniq rs', e2) = collapseP (srules ms)
+      -- FIXME: to put first rule to first postion
+      rs = reverse rs'
       er = e1 ++ e2
   in  unlines $ reverse $ ls $ flip execState (WS [1..] []) $ do
 
@@ -68,8 +70,6 @@ toMake ms =
         printf "$(call GUARD,%s) :" (vname v)
       , printf "\trm -f GUARD_%s_*" (vname v)
       , printf "\ttouch $@"
-      -- FIXME: why do we need this empty line?
-      , ""
       ]
   
   

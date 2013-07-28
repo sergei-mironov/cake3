@@ -13,15 +13,21 @@ maintainer:          grrwlf@gmail.com
 category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
+data-dir:            src
+data-files:          CakeScript.sh
 
 library
-  exposed-modules:     Development.Cake3, Development.Cake3.Types,
-                       Development.Cake3.Writer
+  exposed-modules:   Development.Cake3, Development.Cake3.Types,
+                     Development.Cake3.Writer
 
-  -- other-modules:       
-  build-depends:       base ==4.6.*, haskell-src-meta, template-haskell,
-                       QuasiText, filepath, containers, text, monadloc, mtl
-  hs-source-dirs:      src
+  build-depends:     base ==4.6.*, haskell-src-meta, template-haskell,
+                     QuasiText, filepath, containers, text, monadloc, mtl
+  hs-source-dirs:    src
 
 
+executable cake3
+  hs-source-dirs:    src
+  main-is:           CakeScript.hs
+  build-depends:     base ==4.6.*, process
+  other-modules:     Paths_cake3
 
