@@ -34,8 +34,7 @@ used as a de-facto standard tool which everyone has access to.
 
 The goals of Thirdcake are to help the developer to:
 
-  * Stop overusing Make by removing build-logic from Makefile into more sutable
-    language
+  * Stop overusing Make by writing complex logic in make-language
   * Still have a correct Makefile which could be distributed to endusers
   * Take a bit of Haskell practice :)
 
