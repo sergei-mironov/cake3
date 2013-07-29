@@ -108,7 +108,6 @@ mistakes.
 How it works
 ------------
 
-
 Thirdcake allows user to write Cakefile.hs in plain Haskell to define rules,
 targets and other stuff as usual. After that, `cake3` compiles it into Makefile
 (ghc is required for that). At this point, make will do the rest.
