@@ -6,8 +6,9 @@
 {-# LANGUAGE IncoherentInstances #-}
 
 module Development.Cake3 (
-    Rule
+    Recipe
   , Alias
+  , Rule
   , rule
   , File
   , file'
@@ -60,16 +61,14 @@ file' x = File (escape x)
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
--- FIXME: reverse is a quick hack for generating (head mks) first. See also
--- counter-reverse in Writer :)
-runMake :: [Alias] -> IO MakeState
-runMake mks = execStateT (unMake (unalias $ reverse mks)) defMS
+runMake :: [[Alias]] -> IO MakeState
+runMake mks = execStateT (unMake (unalias $ reverse $ concat mks)) defMS
 
-addRule r = getPos >>= \p -> modifyRules $ M.insertWith mappend (rtgt' r) (Positioned p $ S.singleton r)
+addRecipe r = getPos >>= \p -> modifyRecipes $ M.insertWith mappend (rtgt' r) (Positioned p $ S.singleton r)
 
 addVar v =  modifyVars $ M.insertWith mappend (vname v) (S.singleton v)
 
-modifyRules f = modify $ \ms -> ms { srules = f (srules ms) }
+modifyRecipes f = modify $ \ms -> ms { srecipes = f (srecipes ms) }
 modifyVars f = modify $ \ms -> ms { svars = f (svars ms) }
 modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
 
@@ -85,36 +84,38 @@ instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
     modifyLoc (\l -> l') >> um
 
-newtype A a = A { unA :: StateT Rule Make a }
-  deriving(Monad, Functor, Applicative, MonadState Rule, MonadIO)
+newtype A a = A { unA :: StateT Recipe Make a }
+  deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO)
 
-runA :: Rule -> A a -> Make (a,Rule)
+runA :: Recipe -> A a -> Make (a,Recipe)
 runA r a = runStateT (unA a) r
 
 execA r a = snd <$> runA r a
 
-newtype Alias = Alias (File, Make Rule)
+newtype Alias = Alias (File, Make Recipe)
 
-alias :: [File] -> Make Rule -> [Alias]
+type Rule = [Alias]
+
+alias :: [File] -> Make Recipe -> [Alias]
 alias fs m = map (\f -> Alias (f,m)) fs
 
-unalias :: [Alias] -> Make [Rule]
+unalias :: [Alias] -> Make [Recipe]
 unalias as = sequence $ map (\(Alias (_,x)) -> x) as
 
-rule :: [File] -> A () -> [Alias]
+rule :: [File] -> A () -> Rule
 rule dst act = alias dst $ do
   loc <- getLoc
-  let r = Rule dst [] [] M.empty loc False
+  let r = Recipe dst [] [] M.empty loc False
   r' <- execA r $ act
-  addRule r'
+  addRecipe r'
   return r'
 
-phony :: String -> A () -> [Alias]
+phony :: String -> A () -> Rule
 phony dst' act = let dst = [file' dst'] in alias dst $ do
     loc <- getLoc
-    let r = Rule dst [] [] M.empty loc True
+    let r = Recipe dst [] [] M.empty loc True
     r' <- execA r $ act
-    addRule r'
+    addRecipe r'
     return r'
 
 -- FIXME: depend can be used under unsafe but it doesn't work
@@ -122,17 +123,17 @@ unsafe :: A () -> A ()
 unsafe action = do
   r <- get
   action
-  modifyRule $ \r' -> r' { rsrc' = rsrc' r, rvars = rvars r }
+  modifyRecipe $ \r' -> r' { rsrc' = rsrc' r, rvars = rvars r }
 
-modifyRule = modify
+modifyRecipe = modify
 
 sys :: Command -> A ()
-sys s = modifyRule (\r -> r { rcmd = (rcmd r) ++ [s] })
+sys s = modifyRecipe (\r -> r { rcmd = (rcmd r) ++ [s] })
 
 cmd :: A String -> A ()
 cmd ma = do
   str <- ma
-  modifyRule (\r -> r { rcmd = (str : rcmd r) })
+  modifyRecipe (\r -> r { rcmd = (str : rcmd r) })
 
 depend :: (Ref x) => x -> A ()
 depend x = ref x >> return ()
@@ -157,12 +158,12 @@ class Ref x where
 
 instance Ref Variable where
   ref v@(Variable n _) = do
-    modifyRule $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
+    modifyRecipe $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
     return $ T.pack $ printf "$(%s)" n
 
 instance Ref File where
   ref f = do
-    modifyRule $ \r -> r { rsrc' = f : (rsrc' r)}
+    modifyRecipe $ \r -> r { rsrc' = f : (rsrc' r)}
     return $ T.pack $ unfile f
 
 instance Ref String where
@@ -171,7 +172,7 @@ instance Ref String where
 
 instance Ref Alias where
   ref (Alias (f,mr)) = A (lift mr) >> do
-    modifyRule $ \r' -> r' { rsrc' = f : (rsrc' r')}
+    modifyRecipe $ \r' -> r' { rsrc' = f : (rsrc' r')}
     return $ T.pack $ unfile f
 
 instance Ref x => Ref [x] where

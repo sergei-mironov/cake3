@@ -23,7 +23,7 @@ CWD=`pwd`
 T=`mktemp -d`
 
 cakes() {
-  find -type f -name 'Cake*\.hs' -and -not -name '*_P.hs' \
+  find -type f '(' -name 'Cake*\.hs' -or -name 'Cake*\.lhs' ')' -and -not -name '*_P.hs' \
     | grep -v '^\.[a-zA-Z].*'
 }
 
@@ -33,17 +33,22 @@ CAKELIST="[]"
 for f in $CAKES ; do
   CAKELIST="\"$f\" : $CAKELIST" 
 done
+
+MAIN_=
 MAIN=
 for f in $CAKES ; do
-  tgt=$T/`basename "$f"`
-  fname=`basename "$f" .hs`
-  fdir=`dirname "$f"`
+  fname_=$(basename "$f")
+  tgt=$T/$fname_
+  fname=$(echo "$fname_" | sed 's/\.l\?hs//')
+  pname="${fname}_P.hs"
+  fdir=$(dirname "$f")
 
   if test "$fdir" = "." ; then
     if test -n "$MAIN" ; then
       die 'More than one Cake* file in current dir'
     fi
     MAIN=$fname
+    MAIN_=$fname_
   fi
 
   if test -f "$tgt" ; then
@@ -53,14 +58,14 @@ for f in $CAKES ; do
   cp "$f" "$tgt" ||
     die "cp $f $tgt failed. Duplicate names?"
 
-  if cat $f | grep -q "^import.*${fname}_P" ; then
-    echo "Creating $fdir/${fname}_P.hs" >&2
-    cakepath "$fname" "$fdir" "$CAKELIST" > $fdir/${fname}_P.hs
+  if cat "$f" | grep -q "import.*${fname}_P" ; then
+    echo "Creating $fdir/${pname}" >&2
+    cakepath "$fname" "$fdir" "$CAKELIST" > "$fdir/${pname}"
 
-    cp "$fdir/${fname}_P.hs" "$T/${fname}_P.hs" ||
-      die -n "cp $fdir/${fname}_P.hs $T/${fname}_P.hs failed"
+    cp "$fdir/${pname}" "$T/${pname}" ||
+      die -n "cp $fdir/${pname} $T/${pname} failed"
   else
-    echo "Skipping creating $fdir/${fname}_P.hs" >&2
+    echo "Skipping creating $fdir/${pname}" >&2
   fi
 done
 
@@ -71,9 +76,9 @@ fi
 (
 set -e
 cd $T
-ghc --make "${MAIN}.hs" -main-is $MAIN -o Cakegen
-cp -t $CWD Cakegen
-$CWD/Cakegen > $CWD/Makefile
+ghc --make "$MAIN_" -main-is "$MAIN" -o Cakegen
+cp -t "$CWD" Cakegen
+"$CWD/Cakegen" > "$CWD/Makefile"
 echo "Makefile created" >&2
 )
 

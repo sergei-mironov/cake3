@@ -17,7 +17,8 @@ instance Monoid a => Monoid (Positioned a) where
   mempty = Positioned 0 mempty
   mappend (Positioned a ad) (Positioned b bd) = Positioned (min a b) (mappend ad bd)
 
-cmpPos (Positioned a _) (Positioned b _) = a`compare`b
+-- higher positions go first
+cmpPos (Positioned a _) (Positioned b _) = b`compare`a
 unposition (Positioned _ x) = x
 
 type Command = String
@@ -41,21 +42,21 @@ newtype File = File (Escaped FilePath)
 
 unfile (File (Escaped x)) = x
 
-data Rule = 
-  Rule {
+data Recipe = 
+  Recipe {
     rtgt' :: [File]
   , rsrc' :: [File]
   , rcmd :: [Command]
   , rvars :: Map String (Set Variable)
   , rloc :: String
-  -- FIXME: actually, PHONY is a file's attribute, not rule's
+  -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
 
 rtgt = map unfile . rtgt'
 rsrc = map unfile . rsrc'
 
-type Rules = Map [File] (Positioned (Set Rule))
+type Recipes = Map [File] (Positioned (Set Recipe))
 
 newtype Uniq s = Uniq [s] deriving(Show)
 
@@ -75,7 +76,7 @@ collapseP m = asUniq $ foldr check1 mempty $ M.toList m where
 type Location = String
 
 data MakeState = MS {
-    srules :: Rules
+    srecipes :: Recipes
   , svars :: Vars
   , sloc :: Location
   , spos :: Int

@@ -10,7 +10,7 @@ import CakeLib_P (file)
 
 cfiles = map file [ "lib.c" ]
 
-librules cf = (ofiles cf) ++ clean where
+librules cf = [ofiles cf, clean] where
   clean = phony "clean" $ unsafe $ do
     [make| rm $(ofiles cf) |]
 

@@ -26,9 +26,7 @@ type MakeWriter a = State WS a
 
 toMake ms =
   let (Uniq vs, e1) = collapse (svars ms)
-      (Uniq rs', e2) = collapseP (srules ms)
-      -- FIXME: to put first rule to first postion
-      rs = reverse rs'
+      (Uniq rs, e2) = collapseP (srecipes ms)
       er = e1 ++ e2
   in  unlines $ reverse $ ls $ flip execState (WS [1..] []) $ do
 
