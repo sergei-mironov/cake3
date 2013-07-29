@@ -29,5 +29,5 @@ executable cake3
   hs-source-dirs:    src
   main-is:           CakeScript.hs
   build-depends:     base ==4.6.*, process
-  other-modules:     Paths_cake3
+  other-modules:     Paths_thirdcake
 
