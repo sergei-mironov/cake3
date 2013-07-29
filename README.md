@@ -1,9 +1,9 @@
 Thirdcake
 =========
 
-Thirdcake is a Makefile DSL written in Haskell. It can help you to define clean
-and correct Makefile for your project. Currenly, only GNU Make dialect is
-supported.
+Thirdcake is a Makefile DSL written in Haskell. Write your build logic in
+Haskell, obtain clean and safe Makefile, distribute it to the end-users.
+Currenly, GNU Make is required.
 
 Installing
 ----------
