@@ -14,7 +14,7 @@ Installing
     
          cabal install haskell-src-meta monadloc QuasiText
 
-  3. Build the thirdcake from Github (Thirdcake is not ready for Hackage yet)
+  3. Build the thirdcake from Github
 
          git clone http://github.com/grwlf/cake3
          cd cake3
