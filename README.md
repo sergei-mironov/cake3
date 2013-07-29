@@ -16,7 +16,7 @@ Installing
 
   3. Build the thirdcake from Github (Thirdcake is not ready for Hackage yet)
 
-         git clone http://github.com/grwlf/thirdcake
+         git clone http://github.com/grwlf/cake3
          cd thirdcake
          cabal configure && cabal install
 
