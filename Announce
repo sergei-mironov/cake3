@@ -1,0 +1,27 @@
+Hi, cafe.
+
+Neil Mitchell mentioned more than ten build systems written in Haskell in his
+paper [1]. The list includes shake (of cause) Abba, Coadjuke, hake, hmk, and
+even two cakes.
+
+I'm glad to announce the thirdcake - a DSL for make language. Thirdcake allows
+user to produce clean and safe (I hope) Makefiles for the good old GNU make.
+
+The package is in it's early stages and is not on Hackage yet. Consider visiting
+
+  https://github.com/grwlf/cake3
+
+or just
+
+  git clone https://github.com/grwlf/cake3
+
+./Example/Foo contains working toy-project demonstrating the approach.
+
+Regards,
+Sergey
+
+[1] - http://community.haskell.org/~ndm/downloads/paper-shake_before_building-10_sep_2012.pdf
+
+
+PS
+Sorry for possibly buggy English, feel free to patch my grammar as well
