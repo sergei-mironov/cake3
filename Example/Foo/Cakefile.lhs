@@ -34,10 +34,10 @@ environment.
 > shell = extvar "SHELL" -- normally, will expand to something like /bin/bash
 
 Next we define a list of files (this particular list has one element) of type
-[File]. file function transalte Cakefile-relative path to the project's top dir
+[File]. file function translate Cakefile-relative path to the project's top dir
 relative path. In our case it just turns main.c to ./main.c. For the ./lib
 library, lib.c will be translates into ./lib/lib.c if we run cake3 in the
-toplevel. file function is defined in Cakefile_P.hs
+top level. file function is defined in Cakefile_P.hs
 
 > cfiles = [ file "main.c"]
 
@@ -129,7 +129,7 @@ nothing.
 
 Finally, default Haskell main function collects all required rules and prints the
 Makefile's contents on a standard output. User should not list all the rules,
-they only need to list top-level rules, he/she whants to see in the Makefile.
+they only need to list top-level rules, he/she wants to see in the Makefile.
 
 > main = do
 >   runMake [the_all, clean, selfupdate] >>= putStrLn . toMake

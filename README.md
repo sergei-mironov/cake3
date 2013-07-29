@@ -100,7 +100,7 @@ mistakes.
     so I'm going to add that support ASAP.
   * No support for referencing a makefile-variable from within other variable.
     Again, lack of time. On the TODO list.
-  * Resulting Makefile is actually a GNUMakefile. GNU extentions (shell function
+  * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
     and others) are needed to make variable-guard tricks to work.
   * Coreutils package is required because resulting Makefile calls md5sum and cut
     programs.
@@ -118,8 +118,8 @@ targets and other stuff as usual. After that, `cake3` compiles it into Makefile
 
 Again, in more details:
 
-  1. User writes a cakefile (./Cake\*.hs) describing the rules. Rerer to
-     Example/Foo/Cakefile.hs. Note, that different cakefiles should have
+  1. User writes a cakefile (./Cake\*.hs) describing the rules. Refer to
+     Example/Foo/Cakefile.lhs. Note, that different cakefiles should have
      different names even if they are in different directories due to GHC import
      restrictions. This way user can import one cakefile from another, as if
      they were in the same directory. Actually, cake3 copies all cakefiles into
