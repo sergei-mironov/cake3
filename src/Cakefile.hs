@@ -6,7 +6,7 @@ module Main where
 import Control.Monad.Loc
 import Development.Cake3
 
-import Cakepath_Main (file)
+import Cakefile_P (file)
 
 foodef = "-DFOO" :: String
 
