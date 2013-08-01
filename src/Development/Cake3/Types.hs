@@ -1,3 +1,6 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Development.Cake3.Types where
 
 import Data.Monoid
@@ -80,14 +83,28 @@ collapseP m = asUniq $ foldr check1 mempty $ M.toList m where
                                         | otherwise = (ss, (printf "several values for key %s" (show k)):es)
   asUniq (ps,e) = (Uniq (map unposition $ sortBy cmpPos ps), e)
 
+-- | Latest location in Cakefile known
 type Location = String
 
 data MakeState = MS {
     srecipes :: Recipes
+  -- ^ Recipes collection
   , svars :: Vars
+  -- ^ Variables collection
   , sloc :: Location
+  -- ^ Latest location in Cakefile known
   , spos :: Int
+  -- ^ Current position counter
   } deriving(Show)
 
 defMS = MS mempty mempty mempty 0
+
+class (Functor f, Monad f) => MakeTargets f where
+  allTargets :: f File -> f [File]
+
+instance MakeTargets [] where
+  allTargets = return
+
+instance MakeTargets IO where
+  allTargets mx = mx >>= \x -> return [x]
 

@@ -4,6 +4,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE IncoherentInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Development.Cake3 (
     Recipe
@@ -102,13 +103,15 @@ alias fs m = fmap (\f -> Alias (f,m)) fs
 unalias :: [Alias] -> Make [Recipe]
 unalias as = sequence $ map (\(Alias (_,x)) -> x) as
 
-rule :: [File] -> A () -> Rule
-rule dst act = alias dst $ do
-  loc <- getLoc
-  let r = Recipe dst [] [] M.empty loc False
-  r' <- execA r $ act
-  addRecipe r'
-  return r'
+rule :: (MakeTargets f) => f File -> A () -> f Alias
+rule dst' act = do
+  dst <- allTargets dst'
+  alias dst' $ do
+    loc <- getLoc
+    let r = Recipe dst [] [] M.empty loc False
+    r' <- execA r $ act
+    addRecipe r'
+    return r'
 
 phony :: String -> A () -> Rule
 phony dst' act = let dst = [file' dst'] in alias dst $ do
