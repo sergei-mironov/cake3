@@ -96,8 +96,8 @@ newtype Alias = Alias (File, Make Recipe)
 
 type Rule = [Alias]
 
-alias :: [File] -> Make Recipe -> [Alias]
-alias fs m = map (\f -> Alias (f,m)) fs
+alias :: (Functor f) => f File -> Make Recipe -> f Alias
+alias fs m = fmap (\f -> Alias (f,m)) fs
 
 unalias :: [Alias] -> Make [Recipe]
 unalias as = sequence $ map (\(Alias (_,x)) -> x) as

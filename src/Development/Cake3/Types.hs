@@ -10,6 +10,8 @@ import Data.Set (Set)
 import System.FilePath
 import Text.Printf
 
+-- | Item wich have it's position in the Makefile. Positions are just a sequence
+-- to order the items
 data Positioned a = Positioned { ppos :: Int, pwhat :: a }
   deriving(Show,Eq,Ord)
 
@@ -23,14 +25,17 @@ unposition (Positioned _ x) = x
 
 type Command = String
 
+-- | Makefile variable
 data Variable = Variable { vname :: String, vval :: Maybe String }
   deriving(Show, Eq, Ord)
 
 type Vars = Map String (Set Variable)
 
-newtype Escaped x = Escaped x
-  deriving(Show, Eq, Ord)
+-- | For strings: tag marking escaped string, i.e. the one with ' ' replaced
+-- with '\ '.
+newtype Escaped x = Escaped x deriving(Show, Eq, Ord)
 
+-- FIXME: What about '\' in string?
 escape :: FilePath -> Escaped FilePath
 escape = Escaped . escfile' where
   escfile' [] = []
@@ -56,8 +61,10 @@ data Recipe =
 rtgt = map unfile . rtgt'
 rsrc = map unfile . rsrc'
 
+-- | Collection of recipes.
 type Recipes = Map [File] (Positioned (Set Recipe))
 
+-- | A list with uniq elements, i.e. set.
 newtype Uniq s = Uniq [s] deriving(Show)
 
 collapse :: (Ord y, Show k) => Map k (Set y) -> (Uniq y, [String])
