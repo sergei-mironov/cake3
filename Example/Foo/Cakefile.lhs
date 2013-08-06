@@ -54,7 +54,7 @@ targets and an action as it's arguments
 
     rule :: [File] -> A () -> [Alias]
 
-Actions can be easily defined using [make| ... |] syntax This trick saves user
+Actions can be easily defined using [shell| ... |] syntax This trick saves user
 from writing boilerplate code like
 
     elf = rule (file "main.elf") $ do
@@ -66,7 +66,7 @@ from writing boilerplate code like
 Using quotes, we can write just
 
     elf = rule (file "main.elf") $ do
-      [make|gcc -o $dst $cflags $objs|]
+      [shell|gcc -o $dst $cflags $objs|]
 
 Here, $dst reference is a function defined in Development.Cake3. It expands into
 space-separated list of names of targets
@@ -74,16 +74,16 @@ space-separated list of names of targets
 > sound = "Yuupee" :: String -- Just a haskell variable
 >
 > elf = rule [file "main.elf"] $ do
->   [make| echo "SHELL is $shell" |] -- refer to shell
->   [make| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
->   [make| echo $sound |]            -- refer to sound
+>   [shell| echo "SHELL is $shell" |] -- refer to shell
+>   [shell| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
+>   [shell| echo $sound |]            -- refer to sound
 
 Now .o files: define a rule for each of them
 
 > ofiles = do 
 >   c <- cfiles
 >   rule [c .= "o"] $ do
->     [make| gcc -I lib -c $cflags -o $dst $c |]
+>     [shell| gcc -I lib -c $cflags -o $dst $c |]
 
 Remember, Foo project also uses a library. Lets bring together all the objects.
 Just refer to the ofiles defined in CakeLib.
@@ -107,7 +107,7 @@ instead of
 
 > clean :: [Alias]
 > clean = phony "clean" $ unsafe $ do
->     [make| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
+>     [shell| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
 
 Rule named 'all' is just an alias for elf
 
@@ -122,10 +122,10 @@ nothing.
 
 > cakegen = rule [file "Cakegen" ] $ do
 >   depend cakefiles
->   [make| cake3 |]
+>   [shell| cake3 |]
 
 > selfupdate = rule [file "Makefile"] $ do
->   [make| $cakegen > $dst |]
+>   [shell| $cakegen > $dst |]
 
 Finally, default Haskell main function collects all required rules and prints the
 Makefile's contents on a standard output. User should not list all the rules,

@@ -16,6 +16,7 @@ module Development.Cake3 (
   , MakeState
   , A
   , make
+  , shell
   , makevar
   , extvar
   , dst
@@ -184,6 +185,10 @@ instance Ref x => Ref (A x) where
 instance Ref x => Ref (Make x) where
   ref mx = (A $ lift mx) >>= ref
 
+shell :: QuasiQuoter
+shell = make
+
+-- FIXME: Rename to shell eventually
 make :: QuasiQuoter
 make = QuasiQuoter
   { quotePat  = undefined

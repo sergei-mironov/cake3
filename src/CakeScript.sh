@@ -33,8 +33,7 @@ import Development.Cake3
 import Cakefile_P (file, cakefiles)
 
 elf = rule [file "main.elf"] $ do
-    [make| echo "Your commands here" |]
-    [make| exit 1 |]
+    [shell| echo "Your commands go here" ; exit 1 ; |]
 
 all = do
   phony "all" $ do
