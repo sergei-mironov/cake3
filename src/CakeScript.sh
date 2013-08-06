@@ -50,6 +50,7 @@ while test -n "$1" ; do
   case "$1" in
     --help|-h|help) 
       err "Cake3 the Makefile generator help"
+      err "https://github.com/grwlf/cake3"
       err "Usage: cake3 [--help|-h] [init]"
       err "cake3 init"
       err "    - Create default Cakefile.hs"
