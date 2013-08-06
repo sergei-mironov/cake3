@@ -104,6 +104,7 @@ mistakes.
   * Coreutils package is required because resulting Makefile calls md5sum and
     cut programs.
   * Cakefiles should have unique names (see below for more details)
+  * Posix environment is required. So, Linux, Probably Mac, Probably Windows+Cygwin.
 
 How it works
 ------------
