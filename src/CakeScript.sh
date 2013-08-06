@@ -1,6 +1,7 @@
 #!/bin/sh
 
 die() { echo "$@" >&2 ; exit 1 ; }
+err() { echo "$@" >&2 ; }
 
 cakepath() {
 cat <<EOF
@@ -18,6 +19,55 @@ cakefiles = case "$2" of
 
 EOF
 }
+
+caketemplate() {
+cat <<"EOF"
+{-# OPTIONS_GHC -F -pgmF MonadLoc #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+
+module Cakefile where
+
+import Control.Monad.Loc
+import Development.Cake3
+
+import Cakefile_P (file, cakefiles)
+
+elf = rule [file "main.elf"] $ do
+    [make| echo "Your commands here" |]
+    [make| exit 1 |]
+
+all = do
+  phony "all" $ do
+    depend elf
+
+main = do
+  runMake [Cakefile.all, elf] >>= putStrLn . toMake
+
+EOF
+}
+
+while test -n "$1" ; do
+  case "$1" in
+    --help|-h|help) 
+      err "Cake3 the Makefile generator help"
+      err "Usage: cake3 [--help|-h] [init]"
+      err "cake3 init"
+      err "    - Create default Cakefile.hs"
+      err "cake3"
+      err "    - Build the Makefile"
+      exit 1;
+      ;;
+    init)
+      test -f Cakefile.hs &&
+        die "Cakefile.hs already exists"
+      caketemplate > Cakefile.hs
+      echo "Default Cakefile.hs has been created"
+      echo "Complete the code and run cake3 without arguments"
+      exit 0;
+      ;;
+  esac
+  shift
+done
 
 CWD=`pwd`
 T=`mktemp -d`
