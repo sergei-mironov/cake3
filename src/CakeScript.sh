@@ -120,7 +120,7 @@ for f in $CAKES ; do
 done
 
 if test -z "$MAIN" ; then
-  die "No Cake* file exist in the current directory"
+  die "No Cake* file exist in the current directory. Consider running \`cake3 --help'."
 fi
 
 (
