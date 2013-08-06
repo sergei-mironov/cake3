@@ -20,6 +20,20 @@ Installing
          cd cake3
          cabal configure && cabal install
 
+Usage
+-----
+
+  1. Create the Cakefile.hs in the root dir of your project
+
+        cake3 init
+
+  2. Edit Cakefile.hs, fill it with rules you need (refer to Example/Foo)
+  3. Build Makefile with
+
+        cake3
+
+  4. Run GNU make as usual
+
 Why
 ---
 
