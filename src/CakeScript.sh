@@ -62,8 +62,7 @@ while test -n "$1" ; do
       test -f Cakefile.hs &&
         die "Cakefile.hs already exists"
       caketemplate > Cakefile.hs
-      echo "Default Cakefile.hs has been created"
-      echo "Complete the code and run cake3 without arguments"
+      echo "Cakefile.hs has been created"
       exit 0;
       ;;
   esac
