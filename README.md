@@ -12,20 +12,21 @@ Installing
 
   2. Install dependencies
     
-         cabal install haskell-src-meta monadloc QuasiText
+         $ cabal install haskell-src-meta monadloc QuasiText
 
   3. Build the thirdcake from Github
 
-         git clone http://github.com/grwlf/cake3
-         cd cake3
-         cabal configure && cabal install
+         $ git clone http://github.com/grwlf/cake3
+         $ cd cake3
+         $ cabal configure && cabal install
 
 Usage
 -----
 
   1. Create the Cakefile.hs in the root dir of your project
 
-        cake3 init
+        $ cake3 init
+        Cakefile.hs has been created
 
   2. Edit Cakefile.hs, fill it with rules you need (refer to Example/Foo)
   3. Build Makefile with
