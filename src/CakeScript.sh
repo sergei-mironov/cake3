@@ -39,8 +39,16 @@ all = do
   phony "all" $ do
     depend elf
 
+-- Self-update rules
+cakegen = rule [file "Cakegen" ] $ do
+  depend cakefiles
+  [shell| cake3 |]
+
+selfupdate = rule [file "Makefile"] $ do
+  [shell| $cakegen > $dst |]
+
 main = do
-  runMake [Cakefile.all, elf] >>= putStrLn . toMake
+  runMake [Cakefile.all, elf, selfupdate] >>= putStrLn . toMake
 
 EOF
 }

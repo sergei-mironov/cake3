@@ -128,8 +128,6 @@ Thirdcake allows user to write Cakefile.hs in plain Haskell to define rules,
 targets and other stuff as usual. After that, `cake3` compiles it into Makefile
 (ghc is required for that). At this point, make will do the rest.
 
-    vim Cakefile.hs >> cake3 >> repeat make
-
 Again, in more details:
 
   1. User writes a cakefile (./Cake\*.hs) describing the rules. Refer to
@@ -140,10 +138,13 @@ Again, in more details:
      one temporary directory and compiles them there.
 
   2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
-     produces Makefile. Note that cake3 expects ./Cakegen to print content of
-     the Makefile to it's standard output. Also, cake3 creates ./Cakefile_P.hs
-     containing information about paths. Most important are _files_ function which
-     translates relative _filename_ into _"." </> path_to_root </> filename_
+     produces Makefile. Note that cake3 expects ./Cakegen to print the the
+     Makefile to it's standard output. Also, cake3 creates ./Cakefile_P.hs
+     containing information about paths. Most important are _files_ function
+     which translates relative _filename_ into _"." </> path_to_root </>
+     filename_. Also note, that cake3 is a small program which launches a
+     shell-script. That is a trick to workaround cabal restriction which forbids
+     the shipment of non-binary executables. 
 
   3. `make` can now be used to build the project. Note, that make knows how to
      update itself, so user doesn't have to run cake3 every time he or she
