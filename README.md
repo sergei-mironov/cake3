@@ -30,7 +30,7 @@ Usage
   2. Edit Cakefile.hs, fill it with rules you need (refer to Example/Foo)
   3. Build Makefile with
 
-        cake3
+        $ cake3
 
   4. Run GNU make as usual
 
