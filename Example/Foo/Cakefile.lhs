@@ -31,7 +31,7 @@ Now for the main part: Lets begin with a variable named CFLAGS having a value of
 Another possibility - a variable which has a name but is set elsewhere in the
 environment.
 
-> shell = extvar "SHELL" -- normally, will expand to something like /bin/bash
+> shellvar = extvar "SHELL" -- normally, will expand to something like /bin/bash
 
 Next we define a list of files (this particular list has one element) of type
 [File]. file function translate Cakefile-relative path to the project's top dir
@@ -74,7 +74,7 @@ space-separated list of names of targets
 > sound = "Yuupee" :: String -- Just a haskell variable
 >
 > elf = rule [file "main.elf"] $ do
->   [shell| echo "SHELL is $shell" |] -- refer to shell
+>   [shell| echo "SHELL is $shellvar" |] -- refer to shell
 >   [shell| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
 >   [shell| echo $sound |]            -- refer to sound
 
