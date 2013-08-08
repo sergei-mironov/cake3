@@ -34,7 +34,7 @@ toMake ms =
   tell1 "# https://github.com/grwlf/cake3"
   tell1 ""
 
-  tell1 "GUARD = GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)"
+  tell1 "GUARD = .GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)"
 
   let writeVar (Variable n (Just v)) = tell1 $ printf "%s = %s" n v
       writeVar (Variable n Nothing) = return ()
@@ -70,7 +70,7 @@ toMake ms =
   forM_ vs $ \v -> do
     tellX $ [
         printf "$(call GUARD,%s) :" (vname v)
-      , printf "\trm -f GUARD_%s_*" (vname v)
+      , printf "\trm -f .GUARD_%s_*" (vname v)
       , printf "\ttouch $@"
       ]
   

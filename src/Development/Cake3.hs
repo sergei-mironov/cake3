@@ -57,7 +57,7 @@ import Language.Haskell.Meta (parseExp)
 import Development.Cake3.Types
 import Development.Cake3.Writer
 
-file' x = File (escape x)
+file' cwd x = File (escape $ makeRelative cwd x)
 
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
@@ -112,7 +112,7 @@ rule dst act = alias dst $ do
   return r'
 
 phony :: String -> A () -> Rule
-phony dst' act = let dst = [file' dst'] in alias dst $ do
+phony dst' act = let dst = [File $ escape $ dst'] in alias dst $ do
     loc <- getLoc
     let r = Recipe dst [] [] M.empty loc True
     r' <- execA r $ act
@@ -184,6 +184,9 @@ instance Ref x => Ref (A x) where
 
 instance Ref x => Ref (Make x) where
   ref mx = (A $ lift mx) >>= ref
+
+instance Ref x => Ref (IO x) where
+  ref mx = liftIO mx >>= ref
 
 shell :: QuasiQuoter
 shell = make
