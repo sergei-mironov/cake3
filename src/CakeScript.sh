@@ -146,8 +146,7 @@ set -e
 cd $T
 ghc --make "$MAIN_" -main-is "$MAIN" -o Cakegen
 cp -t "$CWD" Cakegen
-"$CWD/Cakegen" > "$CWD/Makefile"
-echo "Makefile created" >&2
 )
 
+./Cakegen > Makefile  && echo "Makefile created" >&2
 
