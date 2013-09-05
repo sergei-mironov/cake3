@@ -1,5 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Development.Cake3.Types where
 
+import Prelude hiding (FilePath)
 import Data.Monoid
 import qualified Data.List as L
 import Data.List
@@ -7,8 +9,10 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
-import System.FilePath
+-- import System.FilePath
+import Filesystem.Path.CurrentOS
 import Text.Printf
+-- import Data.Text.Lazy as T (Text(..))
 
 -- | Item wich have it's position in the Makefile. Positions are just a sequence
 -- to order the items
@@ -23,46 +27,50 @@ instance Monoid a => Monoid (Positioned a) where
 cmpPos (Positioned a _) (Positioned b _) = b`compare`a
 unposition (Positioned _ x) = x
 
-type Command = String
-
 -- | Makefile variable
-data Variable = Variable { vname :: String, vval :: Maybe String }
-  deriving(Show, Eq, Ord)
+data Variable = Variable {
+    vname :: String
+  , vval :: Maybe String
+  -- ^ Nothing means that variable is defined elsewhere (eg. borrowed from the
+  -- environment)
+  } deriving(Show, Eq, Ord)
 
 type Vars = Map String (Set Variable)
 
 -- | For strings: tag marking escaped string, i.e. the one with ' ' replaced
 -- with '\ '.
-newtype Escaped x = Escaped x deriving(Show, Eq, Ord)
+-- newtype Escaped = Escaped Text deriving(Show, Eq, Ord)
 
 -- FIXME: What about '\' in string?
-escape :: FilePath -> Escaped FilePath
-escape = Escaped . escfile' where
-  escfile' [] = []
-  escfile' (' ':cs) = "\\\\ " ++ escfile' cs
-  escfile' (x:cs) = x:escfile' cs
+-- escape :: FilePath -> Escaped FilePath
+-- escape = Escaped . escfile' where
+--   escfile' [] = []
+--   escfile' (' ':cs) = "\\\\ " ++ escfile' cs
+--   escfile' (x:cs) = x:escfile' cs
 
-newtype File = File (Escaped FilePath)
-  deriving(Show,Eq,Ord)
+-- | Command represents OS command line and consists of a list of fragments.
+-- Each fragment is either text (may contain spaces) or FilePath (spaces should
+-- be escaped)
+type Command = [Either String FilePath]
+return_text x = return [Left x]
+return_file x = return [Right x]
 
-unfile (File (Escaped x)) = x
-
-data Recipe = 
-  Recipe {
-    rtgt' :: [File]
-  , rsrc' :: [File]
+-- | Recipe answers to the question 'How to build the targets'
+data Recipe = Recipe {
+    rtgt :: [FilePath]
+  -- ^ Targets
+  , rsrc :: [FilePath]
+  -- ^ Prerequisites
   , rcmd :: [Command]
+  -- ^ A list of shell commands
   , rvars :: Map String (Set Variable)
   , rloc :: String
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
 
-rtgt = map unfile . rtgt'
-rsrc = map unfile . rsrc'
-
 -- | Collection of recipes.
-type Recipes = Map [File] (Positioned (Set Recipe))
+type Recipes = Map [FilePath] (Positioned (Set Recipe))
 
 -- | A list with uniq elements, i.e. set.
 newtype Uniq s = Uniq [s] deriving(Show)
@@ -90,4 +98,16 @@ data MakeState = MS {
   } deriving(Show)
 
 defMS = MS mempty mempty mempty 0
+
+
+class AsFile x where
+  toFile :: x -> FilePath
+
+instance AsFile FilePath where
+  toFile = id
+
+-- FIXME: make it change the suffix instead of just adding one to another
+-- (.=) :: (AsFile x) => x -> String -> File
+-- (.=) x newext = let (File (Escaped src)) = toFile x
+--                 in (File (Escaped $ replaceExtension src newext))
 

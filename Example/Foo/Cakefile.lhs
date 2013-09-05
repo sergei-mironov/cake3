@@ -1,7 +1,7 @@
 This is a Makefile-like Haskell program describing the build rule for Foo
 project.
 
-> {-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+> {-# LANGUAGE QuasiQuotes #-}
 
 Due to convention, name of module should match name of file (without .hs). Cake3
 script will copy all the cakefiles into one temporary dir, so names should
@@ -66,24 +66,24 @@ from writing boilerplate code like
 Using quotes, we can write just
 
     elf = rule (file "main.elf") $ do
-      [shell|gcc -o $dst $cflags $objs|]
+      shell [cmd|gcc -o $dst $cflags $objs|]
 
 Here, $dst reference is a function defined in Development.Cake3. It expands into
 space-separated list of names of targets
 
-> sound = "Yuupee" :: String -- Just a haskell variable
+> sound = "Yuupee"
 >
 > elf = rule [file "main.elf"] $ do
->   [shell| echo "SHELL is $shellvar" |] -- refer to shell
->   [shell| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
->   [shell| echo $sound |]            -- refer to sound
+>   shell [cmd| echo "SHELL is $shellvar" |] -- refer to shell
+>   shell [cmd| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
+>   shell [cmd| echo $sound |]            -- refer to sound
 
 Now .o files: define a rule for each of them
 
 > ofiles = do 
 >   c <- cfiles
 >   rule [c .= "o"] $ do
->     [shell| gcc -I lib -c $cflags -o $dst $c |]
+>     shell [cmd| gcc -I lib -c $cflags -o $dst $c |]
 
 Remember, Foo project also uses a library. Lets bring together all the objects.
 Just refer to the ofiles defined in CakeLib.
@@ -107,7 +107,7 @@ instead of
 
 > clean :: [Alias]
 > clean = phony "clean" $ unsafe $ do
->     [shell| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
+>     shell [cmd| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
 
 Rule named 'all' is just an alias for elf
 
@@ -122,10 +122,10 @@ nothing.
 
 > cakegen = rule [file "Cakegen" ] $ do
 >   depend cakefiles
->   [shell| cake3 |]
+>   shell [cmd| cake3 |]
 
-> selfupdate = rule [file "Makefile"] $ do
->   [shell| $cakegen > $dst |]
+> selfupdate = rule [makefile] $ do
+>   shell [cmd| $cakegen > $dst |]
 
 Finally, default Haskell main function collects all required rules and prints the
 Makefile's contents on a standard output. User should not list all the rules,

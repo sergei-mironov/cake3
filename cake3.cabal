@@ -21,9 +21,10 @@ library
                      Development.Cake3.Writer
 
   build-depends:     base ==4.6.*, haskell-src-meta, template-haskell,
-                     QuasiText, filepath, containers, text, monadloc, mtl
-  hs-source-dirs:    src
+                     QuasiText, filepath, containers, text, monadloc, mtl,
+                     bytestring,deepseq, system-filepath, text-format
 
+  hs-source-dirs:    src
 
 executable cake3
   hs-source-dirs:    src
