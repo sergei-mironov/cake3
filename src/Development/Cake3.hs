@@ -1,14 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE IncoherentInstances #-}
+-- {-# LANGUAGE IncoherentInstances #-}
+-- {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Development.Cake3 (
     Recipe
   , Alias
   , Rule
+  , Rules
+  , Variable
   , rule
   , file'
   , Make
@@ -26,11 +29,13 @@ module Development.Cake3 (
   , CommandGen(..)
   , unCommand
   , makefile
-  , (.=)
-  , module Filesystem.Path.CurrentOS
+  , Rulable
   , module Control.Monad
   , module Development.Cake3.Writer
+  , module System.FilePath.Wrapper
   ) where
+
+import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -38,21 +43,20 @@ import Control.Monad.Trans
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Loc
-import qualified Data.Text.Lazy as T
-import           Data.Text.Lazy (Text)
+import qualified Data.Text as T
 import qualified Data.List as L
-import Data.List
+import Data.List (concat,map, (++), reverse,elem,intercalate)
+import Data.Foldable (Foldable(..), foldr)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
 import Data.String as S
-import Prelude as P hiding (FilePath)
-import System.IO hiding (FilePath)
+import Data.Tuple
+import System.IO
+import System.FilePath.Wrapper
 import Text.QuasiText
 import Text.Printf
-import Filesystem.Path.CurrentOS
-import Filesystem.Path.CurrentOS as P hiding (concat)
 
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH
@@ -61,26 +65,13 @@ import Language.Haskell.Meta (parseExp)
 import Development.Cake3.Types
 import Development.Cake3.Writer
 
-(.=) f ext = P.replaceExtension f (S.fromString ext)
-
-file' :: String -> String -> String -> FilePath
-file' proot cwd pf = case P.stripPrefix (endslash proot) ((endslash cwd) </> (s2p pf)) of
-  Just f -> f
-  Nothing -> error $ printf "Failed to strip file prefix: cwd %s path %s </> %s" proot cwd pf
-  where
-    s2p = P.decodeString
-    endslash [] = error "file': null arg "
-    endslash x | last x == '/' = s2p x | otherwise = s2p $ x ++ "/"
-
--- FIXME: print to command line abstraction, not to the text
-fileToText :: FilePath -> Text
-fileToText = T.fromStrict . either id id . P.toText
+file' root cwd f = makeRelative (File root) ((File cwd) </> (File f))
 
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
 
-runMake :: [[Alias]] -> IO MakeState
-runMake mks = execStateT (unMake (unalias $ reverse $ P.concat mks)) defMS
+runMake :: [Alias] -> IO MakeState
+runMake mks = execStateT (unMake (unalias $ reverse $ mks)) defMS
 
 addRecipe r = getPos >>= \p -> modifyRecipes $ M.insertWith mappend (rtgt r) (Positioned p $ S.singleton r)
 
@@ -112,43 +103,50 @@ unCommand (CommandGen a) = a
 runA :: Recipe -> A a -> Make (a,Recipe)
 runA r a = runStateT (unA a) r
 
+execA :: Recipe -> A () -> Make Recipe
 execA r a = snd <$> runA r a
 
-newtype Alias = Alias (FilePath, Make Recipe)
+newtype Alias = Alias (File, Make ())
+
+unalias :: [Alias] -> Make ()
+unalias as = sequence_ $ map (\(Alias (_,x)) -> x) as
 
 instance AsFile Alias where
   toFile (Alias (f,_) ) = f
 
-type Rule = [Alias]
+type Rule = Alias
+type Rules = [Alias]
 
-instance AsFile Rule where
-  toFile [a] = toFile a
-  toFile _ = error "Error: attempt to convert several aliases into one file"
+-- instance AsFile (Rule Unit) where
+--   toFile (a) = toFile a
 
-alias :: (Functor f) => f FilePath -> Make Recipe -> f Alias
-alias fs m = fmap (\f -> Alias (f,m)) fs
+class Rulable x l | x -> l where
+  rule :: x -> A () -> l
 
-unalias :: [Alias] -> Make [Recipe]
-unalias as = sequence $ map (\(Alias (_,x)) -> x) as
+phony name = rule' (alias_unit) (\x->[x]) True (File name)
 
--- FIXME: too ugly
-makefile = P.fromText "Makefile"
+alias_functor :: (Functor f) => f File -> Make () -> f Alias
+alias_functor fs m = fmap (\f -> Alias (f,m)) fs
 
-rule' :: Bool -> [FilePath] -> A () -> Rule
-rule' isPhony dst act = alias dst $ do
+alias_unit :: File -> Make () -> Alias
+alias_unit f m = Alias (f,m)
+
+-- FIXME: Oh, too ugly
+makefile = File "Makefile"
+
+rule' :: (x -> Make () -> y) -> (x -> [File]) -> Bool -> x -> A () -> y
+rule' alias unfiles isPhony dst act = alias dst $ do
   loc <- getLoc
-  -- Don't include Makefile in the list of prerequisits if it is already a
-  -- target
-  -- FIXME: check for all possible ./Makefile ././Makefile Makefile and so on
-  let s = if makefile `elem` dst then [] else [makefile]
-      r = Recipe dst s [] M.empty loc isPhony
-  r' <- execA r $ act
+  r' <- execA (Recipe (unfiles dst) [] [] M.empty loc isPhony) act
   addRecipe r'
-  return r'
+  return ()
 
-rule = rule' False
+instance Rulable File Alias where
+  rule = rule' alias_unit (\x->[x]) False
 
-phony name = rule' True [P.decodeString name]
+instance (Functor f, Foldable f) => Rulable (f File) (f Alias) where
+  rule = rule' alias_functor folder False where
+    folder = foldr (\a b -> a:b) []
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()
@@ -179,7 +177,7 @@ makevar n v = var n (Just v)
 extvar :: String -> Make Variable
 extvar n = var n Nothing
 
-dst :: A [FilePath]
+dst :: A [File]
 dst = rtgt <$> get
 
 class Ref x where
@@ -190,21 +188,30 @@ instance Ref Variable where
     modifyRecipe $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
     return_text $ printf "$(%s)" n
 
-instance Ref FilePath where
+instance Ref File where
   ref f = do
     modifyRecipe $ \r -> r { rsrc = f : (rsrc r)}
     return_file $ f
 
-instance Ref String where
-  ref s = do return_text s
-
 instance Ref Alias where
-  ref (Alias (f,mr)) = A (lift mr) >> do
-    modifyRecipe $ \r' -> r' { rsrc = f : (rsrc r')}
+  ref (Alias (f,mr)) = do
+    me <- get
+    -- Prevents the recursion
+    when (not $ f`elem`(rtgt me)) $ do
+      A (lift mr) >> modifyRecipe (\r' -> r' { rsrc = f : (rsrc r')})
     return_file f
 
-instance Ref x => Ref [x] where
-  ref l = L.concat <$> mapM ref l
+instance Ref [Char] where
+  ref s = return_text s
+
+instance Ref [Alias] where
+  ref as = concat <$> (mapM ref as)
+
+instance Ref [File] where
+  ref as = concat <$> (mapM ref as)
+
+-- instance Ref x => Ref [x] where
+--   ref l = L.concat <$> mapM ref l
 
 instance Ref x => Ref (A x) where
   ref mx = mx >>= ref
@@ -240,9 +247,9 @@ cmd = QuasiQuoter
       let chunks = flip map (getChunks (S.fromString s)) $ \c ->
                      case c of
                        T t -> [| return_text t |]
-                       E t -> case parseExp (T.unpack $ T.fromStrict t) of
+                       E t -> case parseExp (T.unpack t) of
                                 Left  e -> error e
                                 Right e -> appE [| ref |] (return e)
-                       V t -> appE [| ref |] (global (mkName (T.unpack $ T.fromStrict t)))
+                       V t -> appE [| ref |] (global (mkName (T.unpack t)))
       in appE [| (\l -> L.concat <$> (sequence l)) |] (listE chunks)
 

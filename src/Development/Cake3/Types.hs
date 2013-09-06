@@ -10,9 +10,11 @@ import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
 -- import System.FilePath
-import Filesystem.Path.CurrentOS
+-- import Filesystem.Path.CurrentOS
 import Text.Printf
 -- import Data.Text.Lazy as T (Text(..))
+
+import System.FilePath.Wrapper
 
 -- | Item wich have it's position in the Makefile. Positions are just a sequence
 -- to order the items
@@ -37,29 +39,18 @@ data Variable = Variable {
 
 type Vars = Map String (Set Variable)
 
--- | For strings: tag marking escaped string, i.e. the one with ' ' replaced
--- with '\ '.
--- newtype Escaped = Escaped Text deriving(Show, Eq, Ord)
-
--- FIXME: What about '\' in string?
--- escape :: FilePath -> Escaped FilePath
--- escape = Escaped . escfile' where
---   escfile' [] = []
---   escfile' (' ':cs) = "\\\\ " ++ escfile' cs
---   escfile' (x:cs) = x:escfile' cs
-
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
 -- be escaped)
-type Command = [Either String FilePath]
+type Command = [Either String File]
 return_text x = return [Left x]
 return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
 data Recipe = Recipe {
-    rtgt :: [FilePath]
+    rtgt :: [File]
   -- ^ Targets
-  , rsrc :: [FilePath]
+  , rsrc :: [File]
   -- ^ Prerequisites
   , rcmd :: [Command]
   -- ^ A list of shell commands
@@ -70,7 +61,7 @@ data Recipe = Recipe {
   } deriving(Show, Eq, Ord)
 
 -- | Collection of recipes.
-type Recipes = Map [FilePath] (Positioned (Set Recipe))
+type Recipes = Map [File] (Positioned (Set Recipe))
 
 -- | A list with uniq elements, i.e. set.
 newtype Uniq s = Uniq [s] deriving(Show)
@@ -99,15 +90,4 @@ data MakeState = MS {
 
 defMS = MS mempty mempty mempty 0
 
-
-class AsFile x where
-  toFile :: x -> FilePath
-
-instance AsFile FilePath where
-  toFile = id
-
--- FIXME: make it change the suffix instead of just adding one to another
--- (.=) :: (AsFile x) => x -> String -> File
--- (.=) x newext = let (File (Escaped src)) = toFile x
---                 in (File (Escaped $ replaceExtension src newext))
 

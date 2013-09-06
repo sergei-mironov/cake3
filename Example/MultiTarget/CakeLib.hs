@@ -1,29 +1,33 @@
-module Main where
+{-# LANGUAGE QuasiQuotes #-}
+module CakeLib where
 
--- import Development.Cake3
--- import CakeLib_P (file)
+import Development.Cake3
+import CakeLib_P (file)
 
 
 
 -- [fa, fb] = (map file [ "file.a", "file.b" ]) `rule` do
---   shell [cmd| echo aa > $fa|]
---   shell [cmd| echo bb > $fb|]
+--   shell [cmd| echo aa > $(fa) |]
+--   shell [cmd| echo bb > $(fb) |]
 
--- main = do
---   runMake [[fb,fa]] >>= putStrLn . toMake
-
-
-type Recipe = [(String, IO ())]
-
-
-rule :: [String] -> (IO ()) -> Recipe
-rule s io = map (\x -> (x,io)) s
-
-[a,b] = ["a","b"] `rule` do
-  putStrLn (fst a)
-  putStrLn (fst b)
-
+fa = (file "file.a") `rule` do
+  shell [cmd| echo aa > $(fa) |]
 
 main = do
-  snd a
-  snd b
+  runMake [fa] >>= putStrLn . toMake
+
+
+-- type Recipe = [(String, IO ())]
+
+
+-- rule :: [String] -> (IO ()) -> Recipe
+-- rule s io = map (\x -> (x,io)) s
+
+-- [a,b] = ["a","b"] `rule` do
+--   putStrLn (fst a)
+--   putStrLn (fst b)
+
+
+-- main = do
+--   snd a
+--   snd b

@@ -73,7 +73,7 @@ space-separated list of names of targets
 
 > sound = "Yuupee"
 >
-> elf = rule [file "main.elf"] $ do
+> elf = rule (file "main.elf") $ do
 >   shell [cmd| echo "SHELL is $shellvar" |] -- refer to shell
 >   shell [cmd| gcc -o $dst $allofiles |] -- refer to dst (aka $@) and *.o
 >   shell [cmd| echo $sound |]            -- refer to sound
@@ -105,7 +105,7 @@ instead of
     clean: ./main.elf ./main.o $(GUARD1)
         rm ./main.elf ; rm GUARD_* ; .. and so on
 
-> clean :: [Alias]
+> clean :: Alias
 > clean = phony "clean" $ unsafe $ do
 >     shell [cmd| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
 
@@ -120,11 +120,11 @@ Normally, that is not the whole story because Makefile actually depend on
 directory structure of a project and some other things. Still, it is better than
 nothing.
 
-> cakegen = rule [file "Cakegen" ] $ do
+> cakegen = rule (file "Cakegen") $ do
 >   depend cakefiles
 >   shell [cmd| cake3 |]
 
-> selfupdate = rule [makefile] $ do
+> selfupdate = rule makefile $ do
 >   shell [cmd| $cakegen > $dst |]
 
 Finally, default Haskell main function collects all required rules and prints the

@@ -12,14 +12,12 @@ cat <<EOF
 
 module ${1}_P(file,cakefiles) where
 
-import Prelude hiding (FilePath)
 import Development.Cake3
-import Filesystem.Path.CurrentOS as P
 
-file :: String -> FilePath
+file :: String -> File
 file x = file' "$TOP" "$2" x
 
-cakefiles :: [FilePath]
+cakefiles :: [File]
 cakefiles = case "$2" of
               "$TOP" -> map (file' "$TOP" "$TOP") \$ $3
               _ -> error "cakefiles are defined for top-level cake only"
