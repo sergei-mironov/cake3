@@ -8,3 +8,8 @@ dist/*
 *.co
 *.swn
 GUARD_*
+*Makefile
+*Cakegen
+*_P.hs
+.*
+tags
