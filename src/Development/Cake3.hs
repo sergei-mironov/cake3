@@ -45,7 +45,7 @@ import Control.Monad.State
 import Control.Monad.Loc
 import qualified Data.Text as T
 import qualified Data.List as L
-import Data.List (concat,map, (++), reverse,elem,intercalate)
+import Data.List (concat,map, (++), reverse,elem,intercalate,delete)
 import Data.Foldable (Foldable(..), foldr)
 import qualified Data.Map as M
 import Data.Map (Map)
@@ -106,13 +106,13 @@ runA r a = runStateT (unA a) r
 execA :: Recipe -> A () -> Make Recipe
 execA r a = snd <$> runA r a
 
-newtype Alias = Alias (File, Make ())
+newtype Alias = Alias (File, [File], Make ())
 
 unalias :: [Alias] -> Make ()
-unalias as = sequence_ $ map (\(Alias (_,x)) -> x) as
+unalias as = sequence_ $ map (\(Alias (_,_,x)) -> x) as
 
 instance AsFile Alias where
-  toFile (Alias (f,_) ) = f
+  toFile (Alias (f,_,_) ) = f
 
 type Rule = Alias
 type Rules = [Alias]
@@ -125,11 +125,14 @@ class Rulable x l | x -> l where
 
 phony name = rule' (alias_unit) (\x->[x]) True (File name)
 
-alias_functor :: (Functor f) => f File -> Make () -> f Alias
-alias_functor fs m = fmap (\f -> Alias (f,m)) fs
+collect :: (Foldable f) => f a -> [a]
+collect = foldr (\a b -> a:b) []
+
+alias_functor :: (Functor f, Foldable f) => f File -> Make () -> f Alias
+alias_functor fs m = fmap (\f -> Alias (f, collect fs ,m)) fs
 
 alias_unit :: File -> Make () -> Alias
-alias_unit f m = Alias (f,m)
+alias_unit f m = Alias (f,[f],m)
 
 -- FIXME: Oh, too ugly
 makefile = File "Makefile"
@@ -145,8 +148,7 @@ instance Rulable File Alias where
   rule = rule' alias_unit (\x->[x]) False
 
 instance (Functor f, Foldable f) => Rulable (f File) (f Alias) where
-  rule = rule' alias_functor folder False where
-    folder = foldr (\a b -> a:b) []
+  rule = rule' alias_functor collect False
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()
@@ -194,11 +196,11 @@ instance Ref File where
     return_file $ f
 
 instance Ref Alias where
-  ref (Alias (f,mr)) = do
+  ref (Alias (f,all,mr)) = do
     me <- get
     -- Prevents the recursion
     when (not $ f`elem`(rtgt me)) $ do
-      A (lift mr) >> modifyRecipe (\r' -> r' { rsrc = f : (rsrc r')})
+      A (lift mr) >> modifyRecipe (\r' -> r' { rsrc =  all ++ (rsrc r')})
     return_file f
 
 instance Ref [Char] where

@@ -27,3 +27,6 @@ replaceExtension f ext = File (F.replaceExtension (toFilePath f) ext)
 
 makeRelative :: (AsFile x, AsFile y)=> x -> y -> File
 makeRelative x y = File (F.makeRelative (toFilePath x) (toFilePath y))
+
+takeDirectory :: (AsFile x) => x -> File
+takeDirectory x = File $ F.takeDirectory (toFilePath x)
