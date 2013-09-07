@@ -2,8 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
--- {-# LANGUAGE IncoherentInstances #-}
--- {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Development.Cake3 (
@@ -35,7 +33,7 @@ module Development.Cake3 (
   , module System.FilePath.Wrapper
   ) where
 
-import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), undefined, error,not)
+import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -64,6 +62,9 @@ import Language.Haskell.Meta (parseExp)
 
 import Development.Cake3.Types
 import Development.Cake3.Writer
+
+-- FIXME: Oh, too ugly
+makefile = File "Makefile"
 
 file' root cwd f = makeRelative (File root) ((File cwd) </> (File f))
 
@@ -100,12 +101,11 @@ newtype A a = A { unA :: StateT Recipe Make a }
 newtype CommandGen = CommandGen (A Command)
 unCommand (CommandGen a) = a
 
-runA :: Recipe -> A a -> Make (a,Recipe)
-runA r a = runStateT (unA a) r
+runA :: Recipe -> A a -> Make ()
+runA r a = runStateT (unA a) r >>= addRecipe . snd
 
-execA :: Recipe -> A () -> Make Recipe
-execA r a = snd <$> runA r a
-
+-- | The File Alias records the file which may be referenced from other rules,
+-- it's "Brothers", and the recipes required to build this file.
 newtype Alias = Alias (File, [File], Make ())
 
 unalias :: [Alias] -> Make ()
@@ -117,11 +117,10 @@ instance AsFile Alias where
 type Rule = Alias
 type Rules = [Alias]
 
--- instance AsFile (Rule Unit) where
---   toFile (a) = toFile a
-
-class Rulable x l | x -> l where
-  rule :: x -> A () -> l
+-- | Means that data structure f (containing Files) may be used to create data
+-- structure a (containing Aliases).
+class Rulable f a | f -> a where
+  rule :: f -> A () -> a
 
 phony name = rule' (alias_unit) (\x->[x]) True (File name)
 
@@ -134,15 +133,10 @@ alias_functor fs m = fmap (\f -> Alias (f, collect fs ,m)) fs
 alias_unit :: File -> Make () -> Alias
 alias_unit f m = Alias (f,[f],m)
 
--- FIXME: Oh, too ugly
-makefile = File "Makefile"
-
 rule' :: (x -> Make () -> y) -> (x -> [File]) -> Bool -> x -> A () -> y
 rule' alias unfiles isPhony dst act = alias dst $ do
   loc <- getLoc
-  r' <- execA (Recipe (unfiles dst) [] [] M.empty loc isPhony) act
-  addRecipe r'
-  return ()
+  runA (Recipe (unfiles dst) [] [] M.empty loc isPhony) act
 
 instance Rulable File Alias where
   rule = rule' alias_unit (\x->[x]) False
@@ -155,14 +149,12 @@ unsafe :: A () -> A ()
 unsafe action = do
   r <- get
   action
-  modifyRecipe $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
-
-modifyRecipe = modify
+  modify $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
 
 shell :: CommandGen -> A ()
 shell cmd = do
   line <- unCommand cmd
-  modifyRecipe (\r -> r { rcmd = (rcmd r) ++ [line] })
+  modify (\r -> r { rcmd = (rcmd r) ++ [line] })
 
 depend :: (Ref x) => x -> A ()
 depend x = ref x >> return ()
@@ -182,25 +174,29 @@ extvar n = var n Nothing
 dst :: A [File]
 dst = rtgt <$> get
 
+-- | Data structure x may be referenced from within the command. Ref class
+-- specifies side effects of such referencing. For example, referencig the file
+-- leads to adding it to the prerequisites list.
 class Ref x where
   ref :: x -> A Command
 
 instance Ref Variable where
   ref v@(Variable n _) = do
-    modifyRecipe $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
+    modify $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
     return_text $ printf "$(%s)" n
 
 instance Ref File where
   ref f = do
-    modifyRecipe $ \r -> r { rsrc = f : (rsrc r)}
+    modify $ \r -> r { rsrc = f : (rsrc r)}
     return_file $ f
 
 instance Ref Alias where
   ref (Alias (f,all,mr)) = do
     me <- get
-    -- Prevents the recursion
+    -- Alias may be referenced from the recipe of itself. This check prevents
+    -- the recursion.
     when (not $ f`elem`(rtgt me)) $ do
-      A (lift mr) >> modifyRecipe (\r' -> r' { rsrc =  all ++ (rsrc r')})
+      A (lift mr) >> modify (\r' -> r' { rsrc =  all ++ (rsrc r')})
     return_file f
 
 instance Ref [Char] where
