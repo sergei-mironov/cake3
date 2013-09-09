@@ -13,7 +13,8 @@ module Development.Cake3 (
   , rule
   , file'
   , Make
-  , MakeState
+  , string
+  , Referrable
   , A
   , shell
   , cmd
@@ -28,12 +29,12 @@ module Development.Cake3 (
   , unCommand
   , makefile
   , Rulable
+  , toMake
   , module Control.Monad
-  , module Development.Cake3.Writer
   , module System.FilePath.Wrapper
   ) where
 
-import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), undefined, error,not)
+import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -52,7 +53,6 @@ import Data.Set (Set)
 import Data.String as S
 import Data.Tuple
 import System.IO
-import System.FilePath.Wrapper
 import Text.QuasiText
 import Text.Printf
 
@@ -62,57 +62,17 @@ import Language.Haskell.Meta (parseExp)
 
 import Development.Cake3.Types
 import Development.Cake3.Writer
+import Development.Cake3.Monad
+import System.FilePath.Wrapper
 
 -- FIXME: Oh, too ugly
 makefile = File "Makefile"
 
-file' root cwd f = makeRelative (File root) ((File cwd) </> (File f))
-
-newtype Make a = Make { unMake :: (StateT MakeState IO) a }
-  deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
-
-runMake :: [Alias] -> IO MakeState
-runMake mks = execStateT (unMake (unalias $ reverse $ mks)) defMS
-
-addRecipe r = getPos >>= \p -> modifyRecipes $ M.insertWith mappend (rtgt r) (Positioned p $ S.singleton r)
-
-addVar v =  modifyVars $ M.insertWith mappend (vname v) (S.singleton v)
-
-modifyRecipes f = modify $ \ms -> ms { srecipes = f (srecipes ms) }
-modifyVars f = modify $ \ms -> ms { svars = f (svars ms) }
-modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
-
-getLoc :: Make String
-getLoc = sloc <$> get
-
-getPos = do
-  p <- spos <$> get
-  modify $ \ms -> ms { spos = p + 1 }
-  return p
-
-instance MonadLoc Make where
-  withLoc l' (Make um) = Make $ do
-    modifyLoc (\l -> l') >> um
-
-newtype A a = A { unA :: StateT Recipe Make a }
-  deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO)
+file' root cwd f = (File ".") </> makeRelative (File root) ((File cwd) </> (File f))
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
 newtype CommandGen = CommandGen (A Command)
 unCommand (CommandGen a) = a
-
-runA :: Recipe -> A a -> Make ()
-runA r a = runStateT (unA a) r >>= addRecipe . snd
-
--- | The File Alias records the file which may be referenced from other rules,
--- it's "Brothers", and the recipes required to build this file.
-newtype Alias = Alias (File, [File], Make ())
-
-unalias :: [Alias] -> Make ()
-unalias as = sequence_ $ map (\(Alias (_,_,x)) -> x) as
-
-instance AsFile Alias where
-  toFile (Alias (f,_,_) ) = f
 
 type Rule = Alias
 type Rules = [Alias]
@@ -159,17 +119,19 @@ shell cmd = do
 depend :: (Ref x) => x -> A ()
 depend x = ref x >> return ()
 
-var :: String -> Maybe String -> Make Variable
-var n v = do
-  let var = Variable n v
-  addVar var
-  return var
+var :: String -> Maybe String -> Variable
+var n v = Variable n v
 
-makevar :: String -> String -> Make Variable
+makevar :: String -> String -> Variable
 makevar n v = var n (Just v)
 
-extvar :: String -> Make Variable
+extvar :: String -> Variable
 extvar n = var n Nothing
+
+string :: String -> Referrable
+string s = Referrable s
+
+newtype Referrable = Referrable String
 
 dst :: A [File]
 dst = rtgt <$> get
@@ -180,24 +142,30 @@ dst = rtgt <$> get
 class Ref x where
   ref :: x -> A Command
 
+instance Ref Referrable where
+  ref v@(Referrable s) = do
+    return_text s
+
 instance Ref Variable where
   ref v@(Variable n _) = do
     modify $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
     return_text $ printf "$(%s)" n
 
+-- Alias may be referenced from the recipe of itself, so we have to prevent
+-- the recursion
+not_myself :: File -> A () -> A ()
+not_myself f act = get >>= \me -> when (not $ f `elem` (rtgt me)) act
+
 instance Ref File where
   ref f = do
-    modify $ \r -> r { rsrc = f : (rsrc r)}
-    return_file $ f
+    not_myself f $ do
+      modify $ \r -> r { rsrc = f : (rsrc r)}
+    return_file f
 
 instance Ref Alias where
-  ref (Alias (f,all,mr)) = do
-    me <- get
-    -- Alias may be referenced from the recipe of itself. This check prevents
-    -- the recursion.
-    when (not $ f`elem`(rtgt me)) $ do
-      A (lift mr) >> modify (\r' -> r' { rsrc =  all ++ (rsrc r')})
-    return_file f
+  ref (Alias (f,_,mr)) = do
+    not_myself f (A (lift mr))
+    ref f
 
 instance Ref [Char] where
   ref s = return_text s

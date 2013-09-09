@@ -71,7 +71,7 @@ Using quotes, we can write just
 Here, $dst reference is a function defined in Development.Cake3. It expands into
 space-separated list of names of targets
 
-> sound = "Yuupee"
+> sound = string "Yuupee"
 >
 > elf = rule (file "main.elf") $ do
 >   shell [cmd| echo "SHELL is $shellvar" |] -- refer to shell
@@ -107,7 +107,7 @@ instead of
 
 > clean :: Alias
 > clean = phony "clean" $ unsafe $ do
->     shell [cmd| rm $elf ; rm GUARD_* ; rm $allofiles ; rm $cakegen |]
+>     shell [cmd| rm $elf ; rm .GUARD_* ; rm $allofiles ; rm $cakegen |]
 
 Rule named 'all' is just an alias for elf
 

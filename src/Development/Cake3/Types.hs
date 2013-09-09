@@ -1,26 +1,25 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Development.Cake3.Types where
 
-import Prelude hiding (FilePath)
 import Data.Monoid
 import qualified Data.List as L
-import Data.List
+import Data.List hiding(foldr)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
--- import System.FilePath
--- import Filesystem.Path.CurrentOS
-import Text.Printf
--- import Data.Text.Lazy as T (Text(..))
 
 import System.FilePath.Wrapper
 
--- | Item wich have it's position in the Makefile. Positions are just a sequence
--- to order the items
+-- | Item wich have it's position in the Makefile. Positioned adds the metric to
+-- the contained datatype. Note, that the metric is not the subject of Eq or
+-- Ord. mappend-ing two metrics results in taking the minimal one.
 data Positioned a = Positioned { ppos :: Int, pwhat :: a }
-  deriving(Show,Eq,Ord)
+  deriving(Show)
 
+instance Eq a => Eq (Positioned a) where
+  (==) a b = (pwhat a) == (pwhat b)
+instance Ord a => Ord (Positioned a) where
+  compare a b = compare (pwhat a) (pwhat b)
 instance Monoid a => Monoid (Positioned a) where
   mempty = Positioned 0 mempty
   mappend (Positioned a ad) (Positioned b bd) = Positioned (min a b) (mappend ad bd)
@@ -47,47 +46,24 @@ return_text x = return [Left x]
 return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
-data Recipe = Recipe {
+data RecipeT v = Recipe {
     rtgt :: [File]
   -- ^ Targets
   , rsrc :: [File]
   -- ^ Prerequisites
   , rcmd :: [Command]
   -- ^ A list of shell commands
-  , rvars :: Map String (Set Variable)
+  , rvars :: v
+  -- ^ Container of variables
   , rloc :: String
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
 
--- | Collection of recipes.
-type Recipes = Map [File] (Positioned (Set Recipe))
+type Recipe = RecipeT (Map String (Set Variable))
 
--- | A list with uniq elements, i.e. set.
-newtype Uniq s = Uniq [s] deriving(Show)
+type CheckedRecipe = RecipeT [Variable]
 
-collapse :: (Ord y, Show k) => Map k (Set y) -> (Uniq y, [String])
-collapse m = asUniq $ foldr check1 mempty $ M.toList m where
-  check1 (k,s) (ss,es) | S.size s == 1 = (s`S.union`ss, es)
-                       | otherwise = (ss, (printf "several values for key %s" (show k)):es)
-  asUniq (s,e) = (Uniq (S.toList s), e)
-
--- FIXME: simplify the code. One needn't two almost similar collapses
-collapseP :: (Ord y, Show k) => Map k (Positioned (Set y)) -> (Uniq y, [String])
-collapseP m = asUniq $ foldr check1 mempty $ M.toList m where
-  check1 (k,p@(Positioned pos s)) (ss,es) | S.size s == 1 = ((Positioned pos (head $ S.toList s)):ss, es)
-                                        | otherwise = (ss, (printf "several values for key %s" (show k)):es)
-  asUniq (ps,e) = (Uniq (map unposition $ sortBy cmpPos ps), e)
-
-type Location = String
-
-data MakeState = MS {
-    srecipes :: Recipes
-  , svars :: Vars
-  , sloc :: Location
-  , spos :: Int
-  } deriving(Show)
-
-defMS = MS mempty mempty mempty 0
-
+-- | Map from the file to the recipe which produces this file
+type Recipes = Map File (Set (Positioned Recipe))
 
