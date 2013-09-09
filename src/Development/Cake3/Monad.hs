@@ -60,9 +60,14 @@ instance MonadLoc Make where
 newtype A a = A { unA :: StateT Recipe Make a }
   deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO)
 
+targets :: A [File]
+targets = rtgt <$> get
+
+prerequisites :: A [File]
+prerequisites = rsrc <$> get
+
 runA :: Recipe -> A a -> Make ()
 runA r a = runStateT (unA a) r >>= addRecipe . snd
-
 
 flattern :: (Ord y, Show y) => Map k (Set y) -> ([String], [y])
 flattern m = F.foldr check1 mempty m where
@@ -86,8 +91,4 @@ newtype Alias = Alias (File, [File], Make ())
 
 unalias :: [Alias] -> Make ()
 unalias as = F.sequence_ $ map (\(Alias (_,_,x)) -> x) as
-
-instance AsFile Alias where
-  toFile (Alias (f,_,_) ) = f
-
 

@@ -30,3 +30,6 @@ makeRelative x y = File (F.makeRelative (toFilePath x) (toFilePath y))
 
 takeDirectory :: (AsFile x) => x -> File
 takeDirectory x = File $ F.takeDirectory (toFilePath x)
+
+takeBaseName :: (AsFile x) => x -> File
+takeBaseName x = File $ F.takeBaseName (toFilePath x)

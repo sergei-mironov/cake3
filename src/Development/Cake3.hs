@@ -16,12 +16,13 @@ module Development.Cake3 (
   , string
   , Referrable
   , A
+  , targets
+  , prerequisites
   , shell
   , cmd
   , makevar
   , extvar
   , dst
-  , runMake
   , phony
   , depend
   , Development.Cake3.unsafe
@@ -29,6 +30,7 @@ module Development.Cake3 (
   , unCommand
   , makefile
   , Rulable
+  , runMake
   , toMake
   , module Control.Monad
   , module System.FilePath.Wrapper
@@ -154,7 +156,7 @@ instance Ref Variable where
 -- Alias may be referenced from the recipe of itself, so we have to prevent
 -- the recursion
 not_myself :: File -> A () -> A ()
-not_myself f act = get >>= \me -> when (not $ f `elem` (rtgt me)) act
+not_myself f act = targets >>= \fs -> when (not (f `elem` fs)) act
 
 instance Ref File where
   ref f = do
@@ -217,5 +219,5 @@ cmd = QuasiQuoter
                                 Left  e -> error e
                                 Right e -> appE [| ref |] (return e)
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
-      in appE [| (\l -> L.concat <$> (sequence l)) |] (listE chunks)
+      in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
 
