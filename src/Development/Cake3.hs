@@ -5,35 +5,37 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Development.Cake3 (
-    Recipe
-  , Alias
-  , Rule
-  , Rules
+
+    Alias
   , Variable
-  , rule
-  , file'
-  , Make
-  , string
+  , File
+  , Recipe
   , Referrable
+
+  -- Monads
   , A
-  , targets
+  , Make
+  , runMake
+  , toMake
+
+  -- Rules
+  , rule
+  , phony
+  , file'
+  , depend
+
+  -- Make parts
+  , string
   , prerequisites
   , shell
   , cmd
   , makevar
   , extvar
   , dst
-  , phony
-  , depend
-  , Development.Cake3.unsafe
+  , makefile
   , CommandGen(..)
   , unCommand
-  , makefile
-  , Rulable
-  , runMake
-  , toMake
-  , module Control.Monad
-  , module System.FilePath.Wrapper
+
   ) where
 
 import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
@@ -68,12 +70,20 @@ import Development.Cake3.Monad
 import System.FilePath.Wrapper
 
 -- FIXME: Oh, too ugly
-makefile = File "Makefile"
+makefile :: File1
+makefile = fromFilePath "Makefile"
 
-file' root cwd f = (File ".") </> makeRelative (File root) ((File cwd) </> (File f))
+file' :: String -> String -> String -> File1
+file' root cwd f = (fromFilePath ".") </> makeRelative (fromFilePath root) ((fromFilePath cwd) </> (fromFilePath f))
+
+runMake :: [Alias] -> IO ()
+runMake a = do
+  (e,st) <- evalMake a 
+  mapM (hPutStrLn stderr) e
+  hPutStrLn stdout (toMake st)
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
-newtype CommandGen = CommandGen (A Command)
+newtype CommandGen = CommandGen (A (Command File1))
 unCommand (CommandGen a) = a
 
 type Rule = Alias
@@ -84,26 +94,33 @@ type Rules = [Alias]
 class Rulable f a | f -> a where
   rule :: f -> A () -> a
 
-phony name = rule' (alias_unit) (\x->[x]) True (File name)
+phony name = rule' (alias_unit) (\x->[x]) True (fromFilePath name)
 
 collect :: (Foldable f) => f a -> [a]
 collect = foldr (\a b -> a:b) []
 
-alias_functor :: (Functor f, Foldable f) => f File -> Make () -> f Alias
+alias_functor :: (Functor f, Foldable f) => f File1 -> Make () -> f Alias
 alias_functor fs m = fmap (\f -> Alias (f, collect fs ,m)) fs
 
-alias_unit :: File -> Make () -> Alias
+alias_unit :: File1 -> Make () -> Alias
 alias_unit f m = Alias (f,[f],m)
 
-rule' :: (x -> Make () -> y) -> (x -> [File]) -> Bool -> x -> A () -> y
+-- FIXME: Ah, boilerplate, boilerplate
+alias_p2 :: (File1,File1) -> Make () -> (Alias,Alias)
+alias_p2 (f1,f2) m = (Alias (f1,[f1,f2],m), Alias (f2,[f1,f2],m))
+
+rule' :: (x -> Make () -> y) -> (x -> [File1]) -> Bool -> x -> A () -> y
 rule' alias unfiles isPhony dst act = alias dst $ do
   loc <- getLoc
   runA (Recipe (unfiles dst) [] [] M.empty loc isPhony) act
 
-instance Rulable File Alias where
+instance Rulable File1 Alias where
   rule = rule' alias_unit (\x->[x]) False
 
-instance (Functor f, Foldable f) => Rulable (f File) (f Alias) where
+instance Rulable (File1,File1) (Alias,Alias) where
+  rule = rule' alias_p2 (\(a,b)->[a,b]) False
+
+instance Rulable [File1] [Alias] where
   rule = rule' alias_functor collect False
 
 -- FIXME: depend can be used under unsafe but it doesn't work
@@ -135,14 +152,14 @@ string s = Referrable s
 
 newtype Referrable = Referrable String
 
-dst :: A [File]
+dst :: A [File1]
 dst = rtgt <$> get
 
 -- | Data structure x may be referenced from within the command. Ref class
 -- specifies side effects of such referencing. For example, referencig the file
 -- leads to adding it to the prerequisites list.
 class Ref x where
-  ref :: x -> A Command
+  ref :: x -> A (Command File1)
 
 instance Ref Referrable where
   ref v@(Referrable s) = do
@@ -155,10 +172,10 @@ instance Ref Variable where
 
 -- Alias may be referenced from the recipe of itself, so we have to prevent
 -- the recursion
-not_myself :: File -> A () -> A ()
+not_myself :: File1 -> A () -> A ()
 not_myself f act = targets >>= \fs -> when (not (f `elem` fs)) act
 
-instance Ref File where
+instance Ref File1 where
   ref f = do
     not_myself f $ do
       modify $ \r -> r { rsrc = f : (rsrc r)}
@@ -175,11 +192,8 @@ instance Ref [Char] where
 instance Ref [Alias] where
   ref as = concat <$> (mapM ref as)
 
-instance Ref [File] where
+instance Ref [File1] where
   ref as = concat <$> (mapM ref as)
-
--- instance Ref x => Ref [x] where
---   ref l = L.concat <$> mapM ref l
 
 instance Ref x => Ref (A x) where
   ref mx = mx >>= ref

@@ -41,17 +41,18 @@ type Vars = Map String (Set Variable)
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
 -- be escaped)
-type Command = [Either String File]
+type Command f = [Either String f]
+
 return_text x = return [Left x]
 return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
-data RecipeT v = Recipe {
-    rtgt :: [File] -- FIXME: convert into Set
+data RecipeT v f = Recipe {
+    rtgt :: [f] -- FIXME: convert into Set
   -- ^ Targets 
-  , rsrc :: [File] -- FIXME: convert into Set
+  , rsrc :: [f] -- FIXME: convert into Set
   -- ^ Prerequisites
-  , rcmd :: [Command]
+  , rcmd :: [Command f]
   -- ^ A list of shell commands
   , rvars :: v
   -- ^ Container of variables
@@ -59,11 +60,4 @@ data RecipeT v = Recipe {
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
-
-type Recipe = RecipeT (Map String (Set Variable))
-
-type CheckedRecipe = RecipeT [Variable]
-
--- | Map from the file to the recipe which produces this file
-type Recipes = Map File (Set (Positioned Recipe))
 
