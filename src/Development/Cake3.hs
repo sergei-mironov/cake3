@@ -22,14 +22,14 @@ module Development.Cake3 (
   , phony
   , depend
   , unsafe
-  , defautlSelfUpdate
+  , defaultSelfUpdate
   
   -- Files
+  , FileLike(..)
   , File
   , file'
   , (.=)
   , (</>)
-  , takeBaseName
 
   -- Make parts
   , string
@@ -82,7 +82,7 @@ makefile = makefileT
 file' :: String -> String -> String -> File1
 file' root cwd f = (fromFilePath ".") </> makeRelative (fromFilePath root) ((fromFilePath cwd) </> (fromFilePath f))
 
-defautlSelfUpdate = rule makefile $ do
+defaultSelfUpdate = rule makefile $ do
   -- shell [cmd|./Cakegen > Makefile |]
   shell (CommandGen (concat <$> sequence [
       ref $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File1)
@@ -128,7 +128,8 @@ alias_p3 (f1,f2,f3) m = (Alias (f1,l,m), Alias (f2,l,m), Alias (f3,l,m)) where
 rule' :: (x -> Make () -> y) -> (x -> [File1]) -> Bool -> x -> A () -> y
 rule' alias unfiles isPhony dst act = alias dst $ do
   loc <- getLoc
-  runA (Recipe (unfiles dst) [] [] M.empty loc isPhony) act
+  p <- getPos
+  runA (Recipe p (unfiles dst) [] [] M.empty loc isPhony) act
 
 instance Rulable File1 Alias where
   rule = rule' alias_unit (\x->[x]) False
@@ -186,13 +187,16 @@ instance Ref Referrable where
 
 instance Ref Variable where
   ref v@(Variable n _) = do
-    modify $ \r -> r { rvars = M.insertWith mappend n (S.singleton v) (rvars r) }
+    modify $ \r -> r { rvars = M.insertWith mappend n [v] (rvars r) }
     return_text $ printf "$(%s)" n
 
 -- Alias may be referenced from the recipe of itself, so we have to prevent
 -- the recursion
 not_myself :: File1 -> A () -> A ()
-not_myself f act = targets >>= \fs -> when (not (f `elem` fs)) act
+not_myself f act = targets >>= \ts -> do
+  f' <- cache f
+  ts' <- mapM cache ts
+  when (not (f' `elem` ts')) act
 
 instance Ref File1 where
   ref f = do

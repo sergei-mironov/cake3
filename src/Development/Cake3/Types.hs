@@ -48,7 +48,8 @@ return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
 data RecipeT v f = Recipe {
-    rtgt :: [f] -- FIXME: convert into Set
+    pos :: Int
+  , rtgt :: [f] -- FIXME: convert into Set
   -- ^ Targets 
   , rsrc :: [f] -- FIXME: convert into Set
   -- ^ Prerequisites

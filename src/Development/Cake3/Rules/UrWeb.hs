@@ -29,15 +29,23 @@ urpparse inp hact sact = do
 -- | Build dependencies of the URP file
 moredeps :: File -> A ()
 moredeps f = depend' f >> accessContents_ f (\c -> urpparse c lib src) where
-  depend' f = prerequisites >>= \ps -> when (not (f`elem`ps)) (depend f)
-  lib (h,x) = when (h=="library") $ moredeps (fromFilePath x)
+  when_not_in_preq f act = do
+    ps <- mapM cache =<< prerequisites
+    f' <- cache f
+    when (not (f' `elem` ps)) act
+  depend' :: File -> A ()
+  depend' f = when_not_in_preq f (depend f)
+  lib (h,x) = when (h=="library") $ do
+    let urp' = ((takeDirectory f) </> (fromFilePath x) .= "urp")
+    when_not_in_preq urp' (moredeps urp')
   src d@(c:_) = when (c/='$') $ do
     depend' ((fromFilePath d) .= "ur")
     depend' ((fromFilePath d) .= "urs")
+  src [] = return ()
 
 -- | Search for @sect@ in the urp file's header.
 urpline :: String -> File -> File
-urpline sect f = reactive sect f $ accessContents $ \c -> do
+urpline sect f = reactive f $ accessContents $ \c -> do
   flip execStateT [] $ urpparse c lib (const $ return ()) where
     lib (n,x) | n == sect = put x
               | otherwise = return ()
@@ -45,7 +53,7 @@ urpline sect f = reactive sect f $ accessContents $ \c -> do
 -- | Search for section @sect@ in the urp file's database line
 -- FIXME: actually supports only 'databse dbname=XXX' format
 urpdb :: String -> File -> File
-urpdb dbsect f = reactive ("urpdb_"++dbsect) f $ accessContents $ \c -> do
+urpdb dbsect f = reactive f $ accessContents $ \c -> do
   flip execStateT [] $ urpparse c lib (const $ return ()) where
     lib (n,x) | n == "database" = put (snd (splitWhen '=' x))
               | otherwise = return ()

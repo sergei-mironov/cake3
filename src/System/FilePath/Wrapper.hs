@@ -16,24 +16,18 @@ newtype FileT a = FileT a
 
 type Tag = String
 
-data ReactFile m = ReactFile Tag (m FilePath)
+data ReactFile m = ReactFile (m FilePath)
 
 instance Show (ReactFile m) where
-  show (ReactFile t _) = printf "ReactFile { %s , IO_ACTION }" (show t)
-
-instance Eq (ReactFile m) where
-  (ReactFile a _) == (ReactFile b _) = a == b
-
-instance Ord (ReactFile m) where
-  (ReactFile a _) `compare` (ReactFile b _) = a `compare` b
+  show (ReactFile _) = "ReactFile { IO_ACTION }"
 
 class FileLike a where
   fromFilePath :: FilePath -> a
-  label :: a -> String
   combine :: a -> a -> a
   takeBaseName :: a -> a
   makeRelative :: a -> a -> a
   replaceExtension :: a -> String -> a
+  takeDirectory :: a -> a
 
 (</>) :: (FileLike a) => a -> a -> a
 (</>) = combine
@@ -43,33 +37,33 @@ class FileLike a where
 
 instance FileLike a => FileLike (FileT a) where
   fromFilePath fp = FileT (fromFilePath fp)
-  label (FileT a) = label a
   combine (FileT a) (FileT b) = FileT (combine a b)
   takeBaseName (FileT a) = FileT (takeBaseName a)
   makeRelative (FileT a) (FileT b) = FileT (makeRelative a b)
   replaceExtension (FileT a) ext = FileT (replaceExtension a ext)
+  takeDirectory (FileT a) = FileT (takeDirectory a)
 
 instance FileLike FilePath where
   fromFilePath = id
-  label = id
   combine = F.combine
   takeBaseName = F.takeBaseName
   makeRelative = F.makeRelative
   replaceExtension = F.replaceExtension
+  takeDirectory = F.takeDirectory
 
 unpack :: (FileT FilePath) -> FilePath
 unpack (FileT f) = f
 
-tag1 fn a = printf "%s(%s)" fn (label a)
-tag2 fn a b = printf "%s(%s,%s)" fn (label a) (label b)
+-- tag1 fn a = printf "%s(%s)" fn (label a)
+-- tag2 fn a b = printf "%s(%s,%s)" fn (label a) (label b)
 
 instance (Applicative m) => FileLike (ReactFile m) where
-  fromFilePath fp = ReactFile fp (pure fp)
-  label (ReactFile t _) = t
-  combine a@(ReactFile ta ma) b@(ReactFile tb mb) = ReactFile (tag2 "combine" a b) (F.combine<$> ma <*> mb)
-  takeBaseName a@(ReactFile ta ma) = ReactFile (tag1 "basename" a) (takeBaseName <$> ma)
-  makeRelative a@(ReactFile ta ma) b@(ReactFile tb mb) = ReactFile (tag2 "rel" a b) (F.makeRelative <$> ma <*> mb)
-  replaceExtension a@(ReactFile ta ma) ext = ReactFile (tag2 "newext" a ext) (F.replaceExtension <$> ma <*> pure ext)
+  fromFilePath fp = ReactFile (pure fp)
+  combine a@(ReactFile ma) b@(ReactFile mb) = ReactFile (F.combine<$> ma <*> mb)
+  takeBaseName a@(ReactFile ma) = ReactFile (takeBaseName <$> ma)
+  makeRelative a@(ReactFile ma) b@(ReactFile mb) = ReactFile (F.makeRelative <$> ma <*> mb)
+  replaceExtension a@(ReactFile ma) ext = ReactFile (F.replaceExtension <$> ma <*> pure ext)
+  takeDirectory a@(ReactFile ma) = ReactFile (F.takeDirectory <$> ma)
 
 type FileCache = M.Map String (FileT FilePath)
 
@@ -86,5 +80,7 @@ accessContents act def f = readCachedFile f >>= maybe (return def) act
 accessContents_ :: (FileCacheMonad m m1) => FileT (ReactFile m1) -> (String -> m ()) -> m ()
 accessContents_ f act = accessContents act () f
 
-reactive :: (Applicative m) => String -> FileT (ReactFile m) -> (FilePath -> FileT (ReactFile m) -> m FilePath) -> FileT (ReactFile m)
-reactive opname f q = FileT (ReactFile (tag1 opname f) (q [] f))
+reactive :: (Applicative m) => FileT (ReactFile m) -> (FilePath -> FileT (ReactFile m) -> m FilePath) -> FileT (ReactFile m)
+reactive f q = FileT (ReactFile (q [] f))
+
+
