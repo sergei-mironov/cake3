@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -19,6 +20,7 @@ module Development.Cake3 (
 
   -- Rules
   , rule
+  , ruleM
   , phony
   , depend
   , unsafe
@@ -45,7 +47,7 @@ module Development.Cake3 (
 
   ) where
 
-import Prelude (Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
+import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -107,41 +109,42 @@ type Rules = [Alias]
 class Rulable f a | f -> a where
   rule :: f -> A () -> a
 
-phony name = rule' (alias_unit) (\x->[x]) True (fromFilePath name)
+ruleM :: (Monad m, Rulable f a) => f -> A () -> m a
+ruleM a b = return $ rule a b
 
-collect :: (Foldable f) => f a -> [a]
-collect = foldr (\a b -> a:b) []
+list1 a = [a]
+fmap1 f a = f a
 
-alias_functor :: (Functor f, Foldable f) => f File1 -> Make () -> f Alias
-alias_functor fs m = fmap (\f -> Alias (f, collect fs ,m)) fs
+list2 (a1,a2) = [a1,a2]
+fmap2 f (a1,a2) = (f a1,f a2)
 
-alias_unit :: File1 -> Make () -> Alias
-alias_unit f m = Alias (f,[f],m)
+list3 (a1,a2,a3) = [a1,a2,a3]
+fmap3 f (a1,a2,a3) = (f a1,f a2,f a3)
 
--- FIXME: Ah, boilerplate, boilerplate
-alias_p2 :: (File1,File1) -> Make () -> (Alias,Alias)
-alias_p2 (f1,f2) m = (Alias (f1,[f1,f2],m), Alias (f2,[f1,f2],m))
-alias_p3 :: (File1,File1,File1) -> Make () -> (Alias,Alias,Alias)
-alias_p3 (f1,f2,f3) m = (Alias (f1,l,m), Alias (f2,l,m), Alias (f3,l,m)) where
-  l = [f1,f2,f3]
+list4 (a1,a2,a3,a4) = [a1,a2,a3,a4]
+fmap4 f (a1,a2,a3,a4) = (f a1,f a2,f a3,f a4)
 
-rule' :: (x -> Make () -> y) -> (x -> [File1]) -> Bool -> x -> A () -> y
-rule' alias unfiles isPhony dst act = alias dst $ do
+phony name = rule' fmap1 list1 True (fromFilePath name)
+
+rule' fmapX listX isPhony dst act = flip fmapX dst $ \x -> Alias (x, listX dst, do
   loc <- getLoc
   p <- getPos
-  runA (Recipe p (unfiles dst) [] [] M.empty loc isPhony) act
+  runA (Recipe p (listX dst) [] [] M.empty loc isPhony) act)
 
 instance Rulable File1 Alias where
-  rule = rule' alias_unit (\x->[x]) False
+  rule = rule' fmap1 list1 False
 
 instance Rulable (File1,File1) (Alias,Alias) where
-  rule = rule' alias_p2 (\(a,b)->[a,b]) False
+  rule = rule' fmap2 list2 False
 
 instance Rulable (File1,File1,File1) (Alias,Alias,Alias) where
-  rule = rule' alias_p3 (\(a,b,c)->[a,b,c]) False
+  rule = rule' fmap3 list3 False
+
+instance Rulable (File1,File1,File1,File1) (Alias,Alias,Alias,Alias) where
+  rule = rule' fmap4 list4 False
 
 instance Rulable [File1] [Alias] where
-  rule = rule' alias_functor collect False
+  rule = rule' map id False
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()

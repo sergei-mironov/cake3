@@ -56,7 +56,7 @@ unalias :: [Alias] -> Make ()
 unalias as = F.sequence_ $ map (\(Alias (_,_,x)) -> x) as
 
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
-  deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO)
+  deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO, MonadFix)
 
 instance FileCacheMonad Make Make where
   cache (FileT (ReactFile act)) = FileT <$> act
@@ -141,7 +141,7 @@ instance MonadLoc Make where
     modifyLoc (\l -> l') >> um
 
 newtype A a = A { unA :: StateT Recipe1 Make a }
-  deriving(Monad, Functor, Applicative, MonadState Recipe1, MonadIO)
+  deriving(Monad, Functor, Applicative, MonadState Recipe1, MonadIO,MonadFix)
 
 instance FileCacheMonad A Make where
   cache f = A (lift (cache f))
