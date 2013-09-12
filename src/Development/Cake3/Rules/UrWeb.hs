@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-module Development.Cake3.Rules.UrWeb where
+module Development.Cake3.Rules.UrWeb(urp) where
 
 import Data.Monoid
 import Data.List
@@ -17,44 +17,45 @@ splitWhen c l = (h,if null t then [] else tail t) where
 
 -- | URP file parser. Takes file name and 2 callbacks: one for header lines and
 -- one for source lines
-urpparse :: (MonadIO m) => FilePath -> ((String,String) -> m ()) -> (FilePath -> m ()) -> m ()
-urpparse fp hact sact = do
-  inp <- lines `liftM` (liftIO $ readFile fp)
-  parseline False inp where
+urpparse :: (Monad m) => String -> ((String,String) -> m ()) -> (FilePath -> m ()) -> m ()
+urpparse inp hact sact = do
+  parseline False (lines inp) where
     parseline _ [] = return ()
     parseline False (l:ls)
       | (unwords (words l)) == [] = parseline True ls
       | otherwise = hact (splitWhen ' ' l) >> parseline False ls
     parseline True (l:ls) = sact l >> parseline True ls
 
--- | Builds dependencies of the URP file
-deps :: File -> A ()
-deps f = do
-  depend' f
-  withFile_ f $ \fp -> do
-    urpparse fp lib src where
-      depend' f = prerequisites >>= \ps -> when (not (f`elem`ps)) (depend f)
-      lib (h,x) = when (h=="library") $ deps (fromFilePath x)
-      src d@(c:_) = when (c/='$') $ do
-        depend' ((fromFilePath d) .= "ur")
-        depend' ((fromFilePath d) .= "urs")
+-- | Build dependencies of the URP file
+moredeps :: File -> A ()
+moredeps f = depend' f >> accessContents_ f (\c -> urpparse c lib src) where
+  depend' f = prerequisites >>= \ps -> when (not (f`elem`ps)) (depend f)
+  lib (h,x) = when (h=="library") $ moredeps (fromFilePath x)
+  src d@(c:_) = when (c/='$') $ do
+    depend' ((fromFilePath d) .= "ur")
+    depend' ((fromFilePath d) .= "urs")
 
+-- | Search for @sect@ in the urp file's header.
 urpline :: String -> File -> File
-urpline sect f = fileTransform sect f $ \fp -> do
-  flip execStateT [] $ urpparse fp lib (const $ return ()) where
+urpline sect f = reactive sect f $ accessContents $ \c -> do
+  flip execStateT [] $ urpparse c lib (const $ return ()) where
     lib (n,x) | n == sect = put x
               | otherwise = return ()
 
+-- | Search for section @sect@ in the urp file's database line
+-- FIXME: actually supports only 'databse dbname=XXX' format
 urpdb :: String -> File -> File
-urpdb dbsect f = fileTransform ("urpdb_"++dbsect) f $ \fp -> do
-  flip execStateT [] $ urpparse fp lib (const $ return ()) where
+urpdb dbsect f = reactive ("urpdb_"++dbsect) f $ accessContents $ \c -> do
+  flip execStateT [] $ urpparse c lib (const $ return ()) where
     lib (n,x) | n == "database" = put (snd (splitWhen '=' x))
               | otherwise = return ()
 
-
+-- | Get executable name of an URP project
 urpexe :: File -> File
 urpexe f = (takeBaseName f) .= "exe"
 
-urp :: File -> A () -> ((Alias, Alias), File)
-urp f act = (rule (urpexe f, urpline "sql" f) (act >> deps f), urpdb "name" f)
+-- | Take the URP file and the build action. Provide three aliases: one for
+-- executable, one for SQL-file and one for database file
+urp :: File -> A () -> (Alias, Alias, Alias)
+urp f act = rule (urpexe f, urpline "sql" f, urpdb "name" f) (act >> moredeps f)
 

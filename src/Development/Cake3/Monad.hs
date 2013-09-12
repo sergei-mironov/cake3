@@ -12,9 +12,9 @@ import qualified Data.Map as M
 import Data.Map(Map)
 import qualified Data.Set as S
 import Data.Set(Set)
-import Data.List
+import Data.List as L
 import Data.Either
-import Data.Foldable as F
+import qualified Data.Foldable as F
 import Development.Cake3.Types
 import Text.Printf
 
@@ -43,9 +43,10 @@ data MakeState = MS {
   , sloc :: Location
   , spos :: Int
   , fileCache :: FileCache
+  , makeDeps :: Set File2
   } deriving(Show)
 
-defMS = MS mempty mempty 0 emptyFileCache
+defMS = MS mempty mempty 0 emptyFileCache S.empty
 
 -- | The File Alias records the file which may be referenced from other rules,
 -- it's "Brothers", and the recipes required to build this file.
@@ -67,13 +68,36 @@ instance FileCacheMonad Make Make where
         modify (\s -> s { fileCache = M.insert key f (fileCache s) } )
         return f
 
+  readCachedFile f = do
+    fp <- unpack <$> cache f
+    modify $ \s -> s { makeDeps = S.insert (fromFilePath fp) (makeDeps s) }
+    -- FIXME: need to catch exceptions
+    Just <$> liftIO (readFile fp)
+
+makefileT :: (FileLike x) => (FileT x)
+makefileT= fromFilePath "Makefile"
+
+-- | Adds Makefile dependencies to the set of rules. Take into account possible
+-- explicit Make-dependencies defined by the user
+-- Note: addMakeDeps is effectively a reverse due to foldl
+addMakeDeps :: [File2] -> [Recipe3] -> [Recipe3]
+addMakeDeps md rs = L.foldl adder [] rs where
+  adder rs r | makefileT`L.elem`(rtgt r) = r{ rsrc = ((rsrc r) ++ md) }:rs
+             | not(makefileT`dependsOn`r) = r{ rsrc = (makefileT:(rsrc r)) }:rs
+             | otherwise = r:rs
+  dependsOn :: File2 -> Recipe3 -> Bool
+  dependsOn f r = if f`L.elem`(rtgt r) then True else godeeper where
+    godeeper = or $ map (\tgt -> or $ map (dependsOn f) (selectBySrc tgt)) (rtgt r)
+  selectBySrc f = fst $ partition (\r -> f`elem`(rsrc r)) rs
+
 evalMake :: [Alias] -> IO ([ErrorMsg], ([Variable], [Recipe3]))
 evalMake aliases = do
   flip evalStateT defMS $ unMake $ do
-    unalias (reverse aliases)
-    (e,v,r1) <- check <$> srecipes <$> get
-    r2 <- unfiles r1
-    return (e,(v,r2))
+    unalias aliases
+    md <- S.toList <$> makeDeps <$> get
+    (e,v,r2) <- check <$> srecipes <$> get
+    r3 <- unfiles r2
+    return (e,(v,addMakeDeps md r3))
 
 modifyRecipes f = modify $ \ms -> ms { srecipes = f (srecipes ms) }
 
@@ -102,6 +126,7 @@ newtype A a = A { unA :: StateT Recipe1 Make a }
 
 instance FileCacheMonad A Make where
   cache f = A (lift (cache f))
+  readCachedFile f = A (lift (readCachedFile f))
 
 targets :: A [File1]
 targets = rtgt <$> get

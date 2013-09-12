@@ -8,21 +8,28 @@ module Development.Cake3 (
 
     Alias
   , Variable
-  , File
   , Recipe
   , Referrable
 
   -- Monads
   , A
   , Make
-  , runMake
   , toMake
+  , runMake
 
   -- Rules
   , rule
   , phony
-  , file'
   , depend
+  , unsafe
+  , defautlSelfUpdate
+  
+  -- Files
+  , File
+  , file'
+  , (.=)
+  , (</>)
+  , takeBaseName
 
   -- Make parts
   , string
@@ -61,7 +68,7 @@ import Text.QuasiText
 import Text.Printf
 
 import Language.Haskell.TH.Quote
-import Language.Haskell.TH
+import Language.Haskell.TH hiding(unsafe)
 import Language.Haskell.Meta (parseExp)
 
 import Development.Cake3.Types
@@ -69,18 +76,24 @@ import Development.Cake3.Writer
 import Development.Cake3.Monad
 import System.FilePath.Wrapper
 
--- FIXME: Oh, too ugly
 makefile :: File1
-makefile = fromFilePath "Makefile"
+makefile = makefileT
 
 file' :: String -> String -> String -> File1
 file' root cwd f = (fromFilePath ".") </> makeRelative (fromFilePath root) ((fromFilePath cwd) </> (fromFilePath f))
 
+defautlSelfUpdate = rule makefile $ do
+  -- shell [cmd|./Cakegen > Makefile |]
+  shell (CommandGen (concat <$> sequence [
+      ref $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File1)
+    , ref " > "
+    , ref makefile]))
+
 runMake :: [Alias] -> IO ()
 runMake a = do
-  (e,st) <- evalMake a 
+  (e,a) <- evalMake a
   mapM (hPutStrLn stderr) e
-  hPutStrLn stdout (toMake st)
+  hPutStrLn stdout (toMake a)
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
 newtype CommandGen = CommandGen (A (Command File1))
@@ -108,6 +121,9 @@ alias_unit f m = Alias (f,[f],m)
 -- FIXME: Ah, boilerplate, boilerplate
 alias_p2 :: (File1,File1) -> Make () -> (Alias,Alias)
 alias_p2 (f1,f2) m = (Alias (f1,[f1,f2],m), Alias (f2,[f1,f2],m))
+alias_p3 :: (File1,File1,File1) -> Make () -> (Alias,Alias,Alias)
+alias_p3 (f1,f2,f3) m = (Alias (f1,l,m), Alias (f2,l,m), Alias (f3,l,m)) where
+  l = [f1,f2,f3]
 
 rule' :: (x -> Make () -> y) -> (x -> [File1]) -> Bool -> x -> A () -> y
 rule' alias unfiles isPhony dst act = alias dst $ do
@@ -119,6 +135,9 @@ instance Rulable File1 Alias where
 
 instance Rulable (File1,File1) (Alias,Alias) where
   rule = rule' alias_p2 (\(a,b)->[a,b]) False
+
+instance Rulable (File1,File1,File1) (Alias,Alias,Alias) where
+  rule = rule' alias_p3 (\(a,b,c)->[a,b,c]) False
 
 instance Rulable [File1] [Alias] where
   rule = rule' alias_functor collect False

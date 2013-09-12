@@ -5,18 +5,15 @@ module CakeLib where
 import Development.Cake3
 import CakeLib_P (file)
 
-librules :: Variable -> Rules
-librules cf = clean : (ofiles cf) where
+librules :: Variable -> [Alias]
+librules cf = (ofiles cf) ++ [clean] where
   clean = phony "clean" $ unsafe $ do
     shell [cmd| rm $(ofiles cf) |]
 
-ofiles :: Variable -> Rules
-ofiles cf = do
-  c <- map file [ "lib.c" ]
+ofiles :: Variable -> [Alias]
+ofiles var = 
+  let c = file "lib.c" in
   rule [c .= "o"] $ do
-    shell [cmd| gcc -c -I lib $cf -o $dst $c |]
+    shell [cmd| gcc -c -I lib $var -o $dst $c |]
 
-defcf = makevar "CFLAGS" ""
-
-main = do
-  runMake (librules defcf) >>= putStrLn . toMake
+main = runMake (librules (makevar "CFLAGS" ""))
