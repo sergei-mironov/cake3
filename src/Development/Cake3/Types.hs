@@ -13,20 +13,23 @@ import System.FilePath.Wrapper
 -- | Item wich have it's position in the Makefile. Positioned adds the metric to
 -- the contained datatype. Note, that the metric is not the subject of Eq or
 -- Ord. mappend-ing two metrics results in taking the minimal one.
-data Positioned a = Positioned { ppos :: Int, pwhat :: a }
-  deriving(Show)
+-- data Pos a = Pos { ppos :: Int, pwhat :: a }
+--   deriving(Show, Eq)
 
-instance Eq a => Eq (Positioned a) where
-  (==) a b = (pwhat a) == (pwhat b)
-instance Ord a => Ord (Positioned a) where
-  compare a b = compare (pwhat a) (pwhat b)
-instance Monoid a => Monoid (Positioned a) where
-  mempty = Positioned 0 mempty
-  mappend (Positioned a ad) (Positioned b bd) = Positioned (min a b) (mappend ad bd)
+-- instance Ord a => Ord (Pos a) where
+--   compare (Pos p w) (Pos p2 w2) =
+--     case p`compare`p2 of
+--       EQ -> w`compare`w2
+--       x -> x
 
--- higher positions go first
-cmpPos (Positioned a _) (Positioned b _) = b`compare`a
-unposition (Positioned _ x) = x
+-- instance Monoid a => Monoid (Pos a) where
+--   mempty = Pos 0 mempty
+--   mappend (Pos a ad) (Pos b bd) = Pos (min a b) (mappend ad bd)
+
+-- -- higher positions go first
+-- cmpPos (Pos a _) (Pos b _) = a`compare`b
+-- unposition (Pos _ x) = x
+
 
 -- | Makefile variable
 data Variable = Variable {
@@ -41,19 +44,18 @@ type Vars = Map String (Set Variable)
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
 -- be escaped)
-type Command f = [Either String f]
+type Command = [Either String File]
 
 return_text x = return [Left x]
 return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
-data RecipeT v f = Recipe {
-    pos :: Int
-  , rtgt :: [f] -- FIXME: convert into Set
+data RecipeT v = Recipe {
+    rtgt :: Set File
   -- ^ Targets 
-  , rsrc :: [f] -- FIXME: convert into Set
+  , rsrc :: Set File
   -- ^ Prerequisites
-  , rcmd :: [Command f]
+  , rcmd :: [Command]
   -- ^ A list of shell commands
   , rvars :: v
   -- ^ Container of variables
@@ -61,4 +63,3 @@ data RecipeT v f = Recipe {
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
-

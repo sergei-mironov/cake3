@@ -27,33 +27,16 @@ EOF
 
 caketemplate() {
 cat <<"EOF"
-{-# OPTIONS_GHC -F -pgmF MonadLoc #-}
-{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
-
+{-# LANGUAGE RecursiveDo, QuasiQuotes #-}
 module Cakefile where
 
-import Control.Monad.Loc
 import Development.Cake3
-
 import Cakefile_P (file, cakefiles)
 
-elf = rule [file "main.elf"] $ do
-    [shell| echo "Your commands go here" ; exit 1 ; |]
+elf = rule (file "main.elf") $ do
+    shell [cmd| echo "Your commands go here" ; exit 1 ; |]
 
-all = do
-  phony "all" $ do
-    depend elf
-
--- Self-update rules
-cakegen = rule [file "Cakegen" ] $ do
-  depend cakefiles
-  [shell| cake3 |]
-
-selfupdate = rule [file "Makefile"] $ do
-  [shell| $cakegen > $dst |]
-
-main = do
-  runMake [Cakefile.all, elf, selfupdate] >>= putStrLn . toMake
+main = runMake (place (phony "all" (depend elf)) >> place defaultSelfUpdate)
 
 EOF
 }

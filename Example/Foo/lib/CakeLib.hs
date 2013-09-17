@@ -1,3 +1,4 @@
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module CakeLib where
@@ -5,15 +6,24 @@ module CakeLib where
 import Development.Cake3
 import CakeLib_P (file)
 
-librules :: Variable -> [Alias]
-librules cf = (ofiles cf) ++ [clean] where
-  clean = phony "clean" $ unsafe $ do
-    shell [cmd| rm $(ofiles cf) |]
+librules var = do
+  o <- ofiles var
+  c <- clean var
+  return $ o ++ [c]
 
-ofiles :: Variable -> [Alias]
-ofiles var = 
-  let c = file "lib.c" in
-  rule [c .= "o"] $ do
-    shell [cmd| gcc -c -I lib $var -o $dst $c |]
+clean :: Variable -> Make Alias
+clean var = phonyM "clean" $ do
+  unsafe (shell [cmd| rm $(ofiles var) |])
 
-main = runMake (librules (makevar "CFLAGS" ""))
+ofiles :: Variable -> Make [Alias]
+ofiles var = mdo
+  let parseSomething = return (file "lib.c")
+  c <- parseSomething
+  o <- ruleM [c .= "o"] $ do
+    shell [cmd| gcc -c -I lib $var -o $o $c |]
+  return o
+
+main = runMake $ do
+  let var = makevar "CFLAGS" ""
+  place $ ofiles var
+  place $ clean var

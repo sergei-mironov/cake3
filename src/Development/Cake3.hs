@@ -10,7 +10,9 @@ module Development.Cake3 (
     Alias
   , Variable
   , Recipe
-  , Referrable
+  , Referal(..)
+  , Placable(..)
+  , Reference
 
   -- Monads
   , A
@@ -22,6 +24,7 @@ module Development.Cake3 (
   , rule
   , ruleM
   , phony
+  , phonyM
   , depend
   , unsafe
   , defaultSelfUpdate
@@ -45,6 +48,8 @@ module Development.Cake3 (
   , CommandGen(..)
   , unCommand
 
+  -- More
+  , module Control.Monad
   ) where
 
 import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
@@ -62,7 +67,7 @@ import Data.Foldable (Foldable(..), foldr)
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
-import Data.Set (Set)
+import Data.Set (Set,member,insert)
 import Data.String as S
 import Data.Tuple
 import System.IO
@@ -78,27 +83,26 @@ import Development.Cake3.Writer
 import Development.Cake3.Monad
 import System.FilePath.Wrapper
 
-makefile :: File1
+makefile :: File
 makefile = makefileT
 
-file' :: String -> String -> String -> File1
+file' :: String -> String -> String -> File
 file' root cwd f = (fromFilePath ".") </> makeRelative (fromFilePath root) ((fromFilePath cwd) </> (fromFilePath f))
 
 defaultSelfUpdate = rule makefile $ do
   -- shell [cmd|./Cakegen > Makefile |]
   shell (CommandGen (concat <$> sequence [
-      ref $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File1)
-    , ref " > "
+      ref $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File)
+    , ref $ string " > "
     , ref makefile]))
 
-runMake :: [Alias] -> IO ()
-runMake a = do
-  (e,a) <- evalMake a
-  mapM (hPutStrLn stderr) e
-  hPutStrLn stdout (toMake a)
+runMake :: Make () -> IO ()
+runMake mk = evalMake mk >>= output where
+  output (Left err) = hPutStrLn stderr err
+  output (Right a) = hPutStrLn stdout (toMake a)
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
-newtype CommandGen = CommandGen (A (Command File1))
+newtype CommandGen = CommandGen (A Command)
 unCommand (CommandGen a) = a
 
 type Rule = Alias
@@ -110,7 +114,7 @@ class Rulable f a | f -> a where
   rule :: f -> A () -> a
 
 ruleM :: (Monad m, Rulable f a) => f -> A () -> m a
-ruleM a b = return $ rule a b
+ruleM a b = return (rule a b)
 
 list1 a = [a]
 fmap1 f a = f a
@@ -126,24 +130,26 @@ fmap4 f (a1,a2,a3,a4) = (f a1,f a2,f a3,f a4)
 
 phony name = rule' fmap1 list1 True (fromFilePath name)
 
+phonyM :: (Monad m) => String -> A () -> m Alias
+phonyM n a = return $ phony n a
+
 rule' fmapX listX isPhony dst act = flip fmapX dst $ \x -> Alias (x, listX dst, do
   loc <- getLoc
-  p <- getPos
-  runA (Recipe p (listX dst) [] [] M.empty loc isPhony) act)
+  runA (Recipe (S.fromList $ listX dst) mempty [] M.empty loc isPhony) act)
 
-instance Rulable File1 Alias where
+instance Rulable File Alias where
   rule = rule' fmap1 list1 False
 
-instance Rulable (File1,File1) (Alias,Alias) where
+instance Rulable (File,File) (Alias,Alias) where
   rule = rule' fmap2 list2 False
 
-instance Rulable (File1,File1,File1) (Alias,Alias,Alias) where
+instance Rulable (File,File,File) (Alias,Alias,Alias) where
   rule = rule' fmap3 list3 False
 
-instance Rulable (File1,File1,File1,File1) (Alias,Alias,Alias,Alias) where
+instance Rulable (File,File,File,File) (Alias,Alias,Alias,Alias) where
   rule = rule' fmap4 list4 False
 
-instance Rulable [File1] [Alias] where
+instance Rulable [File] [Alias] where
   rule = rule' map id False
 
 -- FIXME: depend can be used under unsafe but it doesn't work
@@ -158,7 +164,7 @@ shell cmd = do
   line <- unCommand cmd
   modify (\r -> r { rcmd = (rcmd r) ++ [line] })
 
-depend :: (Ref x) => x -> A ()
+depend :: (Referal x) => x -> A ()
 depend x = ref x >> return ()
 
 var :: String -> Maybe String -> Variable
@@ -170,64 +176,65 @@ makevar n v = var n (Just v)
 extvar :: String -> Variable
 extvar n = var n Nothing
 
-string :: String -> Referrable
-string s = Referrable s
+string :: String -> Reference
+string s = Reference s
 
-newtype Referrable = Referrable String
+newtype Reference = Reference String
 
-dst :: A [File1]
+dst :: A (Set File)
 dst = rtgt <$> get
 
--- | Data structure x may be referenced from within the command. Ref class
--- specifies side effects of such referencing. For example, referencig the file
--- leads to adding it to the prerequisites list.
-class Ref x where
-  ref :: x -> A (Command File1)
+-- | Data structure x may be referenced from within the command. Referal
+-- class specifies side effects of such referencing. For example, referencig the
+-- file leads to adding it to the prerequisites list.
+class Referal x where
+  ref :: x -> A Command
 
-instance Ref Referrable where
-  ref v@(Referrable s) = do
+instance Referal Reference where
+  ref v@(Reference s) = do
     return_text s
 
-instance Ref Variable where
+instance Referal Variable where
   ref v@(Variable n _) = do
-    modify $ \r -> r { rvars = M.insertWith mappend n [v] (rvars r) }
+    addVariable v
     return_text $ printf "$(%s)" n
 
 -- Alias may be referenced from the recipe of itself, so we have to prevent
 -- the recursion
-not_myself :: File1 -> A () -> A ()
+not_myself :: File -> A a -> A ()
 not_myself f act = targets >>= \ts -> do
-  f' <- cache f
-  ts' <- mapM cache ts
-  when (not (f' `elem` ts')) act
+  when (not (f `member` ts)) (act >> return ())
 
-instance Ref File1 where
+instance Referal File where
   ref f = do
     not_myself f $ do
-      modify $ \r -> r { rsrc = f : (rsrc r)}
+      modify $ \r -> r { rsrc = f `insert` (rsrc r)}
     return_file f
 
-instance Ref Alias where
+instance Referal Alias where
   ref (Alias (f,_,mr)) = do
     not_myself f (A (lift mr))
     ref f
 
-instance Ref [Char] where
-  ref s = return_text s
+-- instance Referal [Char] where
+--   ref s = return_text s
 
-instance Ref [Alias] where
+instance Referal [Alias] where
   ref as = concat <$> (mapM ref as)
 
-instance Ref [File1] where
-  ref as = concat <$> (mapM ref as)
+instance Referal (Set File) where
+  ref as = ref (S.toList as)
 
-instance Ref x => Ref (A x) where
+instance Referal [File] where
+  ref fs = concat <$> mapM ref fs
+
+instance Referal x => Referal (A x) where
   ref mx = mx >>= ref
 
-instance Ref x => Ref (Make x) where
+instance Referal x => Referal (Make x) where
   ref mx = (A $ lift mx) >>= ref
 
-instance Ref x => Ref (IO x) where
+instance Referal x => Referal (IO x) where
   ref mx = liftIO mx >>= ref
 
 -- | Has effect of a function :: QQ -> CommandGen where QQ is a string supporting
@@ -260,4 +267,5 @@ cmd = QuasiQuoter
                                 Right e -> appE [| ref |] (return e)
                        V t -> appE [| ref |] (global (mkName (T.unpack t)))
       in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
+
 

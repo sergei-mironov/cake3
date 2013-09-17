@@ -14,12 +14,11 @@ import Text.Printf
 newtype FileT a = FileT a
   deriving(Show,Eq,Ord)
 
-type Tag = String
+instance (Monoid a) => Monoid(FileT a) where
+  mempty = FileT mempty
+  mappend (FileT a) (FileT b) = FileT (a`mappend`b)
 
-data ReactFile m = ReactFile (m FilePath)
-
-instance Show (ReactFile m) where
-  show (ReactFile _) = "ReactFile { IO_ACTION }"
+type File = FileT FilePath
 
 class FileLike a where
   fromFilePath :: FilePath -> a
@@ -53,34 +52,4 @@ instance FileLike FilePath where
 
 unpack :: (FileT FilePath) -> FilePath
 unpack (FileT f) = f
-
--- tag1 fn a = printf "%s(%s)" fn (label a)
--- tag2 fn a b = printf "%s(%s,%s)" fn (label a) (label b)
-
-instance (Applicative m) => FileLike (ReactFile m) where
-  fromFilePath fp = ReactFile (pure fp)
-  combine a@(ReactFile ma) b@(ReactFile mb) = ReactFile (F.combine<$> ma <*> mb)
-  takeBaseName a@(ReactFile ma) = ReactFile (takeBaseName <$> ma)
-  makeRelative a@(ReactFile ma) b@(ReactFile mb) = ReactFile (F.makeRelative <$> ma <*> mb)
-  replaceExtension a@(ReactFile ma) ext = ReactFile (F.replaceExtension <$> ma <*> pure ext)
-  takeDirectory a@(ReactFile ma) = ReactFile (F.takeDirectory <$> ma)
-
-type FileCache = M.Map String (FileT FilePath)
-
-emptyFileCache :: FileCache
-emptyFileCache = M.empty
-
-class (Applicative m, Applicative m1, Monad m, Monad m1) => FileCacheMonad m m1 where
-  cache :: FileT (ReactFile m1) -> m (FileT FilePath)
-  readCachedFile :: FileT (ReactFile m1) -> m (Maybe String)
-
-accessContents :: (FileCacheMonad m m1) => (String -> m a) -> a -> FileT (ReactFile m1) -> m a
-accessContents act def f = readCachedFile f >>= maybe (return def) act
-
-accessContents_ :: (FileCacheMonad m m1) => FileT (ReactFile m1) -> (String -> m ()) -> m ()
-accessContents_ f act = accessContents act () f
-
-reactive :: (Applicative m) => FileT (ReactFile m) -> (FilePath -> FileT (ReactFile m) -> m FilePath) -> FileT (ReactFile m)
-reactive f q = FileT (ReactFile (q [] f))
-
 

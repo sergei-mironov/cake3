@@ -18,5 +18,7 @@ main = mdo
   hehe <- ruleM (file "file.hehe") $ do
     shell [cmd| cat $(head objs) > $hehe |]
 
-  runMake (hehe:objs)
+  runMake $ do
+    place hehe
+    place objs
 
