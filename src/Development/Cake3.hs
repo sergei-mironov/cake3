@@ -50,6 +50,7 @@ module Development.Cake3 (
 
   -- More
   , module Control.Monad
+  , module Control.Applicative
   ) where
 
 import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
@@ -71,6 +72,7 @@ import Data.Set (Set,member,insert)
 import Data.String as S
 import Data.Tuple
 import System.IO
+import qualified System.FilePath as F
 import Text.QuasiText
 import Text.Printf
 
@@ -87,7 +89,10 @@ makefile :: File
 makefile = makefileT
 
 file' :: String -> String -> String -> File
-file' root cwd f = (fromFilePath ".") </> makeRelative (fromFilePath root) ((fromFilePath cwd) </> (fromFilePath f))
+file' root cwd f' =
+  let f = F.dropTrailingPathSeparator f' in
+  (fromFilePath ".") </> makeRelative (fromFilePath root)
+                                      ((fromFilePath cwd) </> (fromFilePath f))
 
 defaultSelfUpdate = rule makefile $ do
   -- shell [cmd|./Cakegen > Makefile |]
@@ -135,7 +140,7 @@ phonyM n a = return $ phony n a
 
 rule' fmapX listX isPhony dst act = flip fmapX dst $ \x -> Alias (x, listX dst, do
   loc <- getLoc
-  runA (Recipe (S.fromList $ listX dst) mempty [] M.empty loc isPhony) act)
+  runA (Recipe (S.fromList (listX dst)) mempty [] M.empty loc isPhony) act)
 
 instance Rulable File Alias where
   rule = rule' fmap1 list1 False
@@ -190,6 +195,9 @@ dst = rtgt <$> get
 class Referal x where
   ref :: x -> A Command
 
+instance Referal Command where
+  ref = return
+
 instance Referal Reference where
   ref v@(Reference s) = do
     return_text s
@@ -216,9 +224,6 @@ instance Referal Alias where
     not_myself f (A (lift mr))
     ref f
 
--- instance Referal [Char] where
---   ref s = return_text s
-
 instance Referal [Alias] where
   ref as = concat <$> (mapM ref as)
 
@@ -236,6 +241,9 @@ instance Referal x => Referal (Make x) where
 
 instance Referal x => Referal (IO x) where
   ref mx = liftIO mx >>= ref
+
+instance Referal CommandGen where
+  ref (CommandGen acmd) = ref acmd
 
 -- | Has effect of a function :: QQ -> CommandGen where QQ is a string supporting
 -- $VARs. Each $VAR will be dereferenced using Ref typeclass. Result will

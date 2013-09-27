@@ -19,6 +19,7 @@ import Data.Either
 import qualified Data.Foldable as F
 import qualified Data.Traversable as F
 import Development.Cake3.Types
+import qualified System.IO as IO
 import Text.Printf
 
 import System.FilePath.Wrapper
@@ -48,6 +49,9 @@ modifyRecipes f = modify $ \ms -> ms { srecipes = f (srecipes ms) }
 
 applyPlacement :: (Eq x) => Map Target (RecipeT x) -> [Target] -> [RecipeT x]
 applyPlacement rs p = nub $ (mapMaybe id $ map (flip M.lookup rs) p) ++ (map snd $ M.toList rs)
+
+addMakeDep :: File -> Make ()
+addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
 defMS = MS mempty mempty mempty mempty
 
@@ -145,6 +149,11 @@ runA r a = do
   r' <- snd <$> runStateT (unA a) r
   addRecipe r'
   return r'
+
+readFile :: File -> A String
+readFile f = do
+  A (lift $ addMakeDep f)
+  liftIO (IO.readFile (unpack f))
 
 class Placable a where
   place :: a -> Make ()

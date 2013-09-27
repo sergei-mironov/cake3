@@ -1,5 +1,6 @@
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Development.Cake3.Rules.UrWeb(urp) where
+module Development.Cake3.Rules.UrWeb(urweb,urembed) where
 
 import Data.Monoid
 import Data.List
@@ -7,11 +8,13 @@ import Data.Set (member)
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.State
+import System.Directory
+import System.IO as IO
 
 import System.FilePath.Wrapper
 import Development.Cake3
 import Development.Cake3.Types
-import Development.Cake3.Monad
+import Development.Cake3.Monad as C3
 
 splitWhen c l = (h,if null t then [] else tail t) where
   (h,t) = span (/=c) l
@@ -35,12 +38,15 @@ moredeps f = do
     True -> return ()
     False -> do
       depend f
-      inp <- liftIO (readFile $ unpack f)
+      inp <- C3.readFile f
       urpparse inp lib src
   where
-
     lib (h,x) = when (h=="library") $ do
-      moredeps ((takeDirectory f) </> (fromFilePath x) .= "urp")
+      let nested = (takeDirectory f) </> (fromFilePath x)
+      isdir <- liftIO $ doesDirectoryExist (unpack nested)
+      case isdir of
+        True -> moredeps (nested </> (fromFilePath "lib.urp"))
+        False -> moredeps (nested .= "urp")
 
     src d@(c:_) = when (c/='$') $ do
       depend ((fromFilePath d) .= "ur" :: File)
@@ -66,11 +72,27 @@ urpexe f = (takeBaseName f) .= "exe"
 
 -- | Take the URP file and the build action. Provide three aliases: one for
 -- executable, one for SQL-file and one for database file
-urp :: File -> A() -> IO (Alias, Alias, Alias)
-urp f act = do
-  c <- liftIO (readFile $ unpack f)
+--
+-- FIXME: Rewrite in urembed style: fill urweb_cmd and pass it back to the user
+urweb' :: File -> A() -> IO (Alias, Alias, Alias)
+urweb' f act = do
+  c <- liftIO (IO.readFile $ unpack f)
   exe <- return (urpexe f)
   sql <- urpline "sql" c
   db <- urpdb "name" c
   ruleM (exe,sql,db) (act >> moredeps f)
+
+urweb :: File -> A() -> IO (Alias, Alias, Alias)
+urweb f = urweb' (f .= "urp")
+
+-- | Generate Ur/Web project file @urp@ providing embedded files @files@
+-- FIXME: Generate unique variable name instead of URGCC
+urembed :: File -> [File] -> (CommandGen -> A ()) -> IO Alias
+urembed urp files act = let
+  dir = takeDirectory urp
+  fn = takeFileName urp
+  in ruleM urp $ do
+    depend (dir`rule`(shell [cmd| mkdir -pv $dir |]))
+    let gcc = makevar "URGCC" "$(shell urweb -print-ccompiler)"
+    act [cmd| urembed -d $(string (unpack fn)) -o $dir -c `which $gcc` $files |]
 

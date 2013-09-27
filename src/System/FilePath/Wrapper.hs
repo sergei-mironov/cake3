@@ -14,7 +14,7 @@ import Text.Printf
 newtype FileT a = FileT a
   deriving(Show,Eq,Ord)
 
-instance (Monoid a) => Monoid(FileT a) where
+instance (Monoid a) => Monoid (FileT a) where
   mempty = FileT mempty
   mappend (FileT a) (FileT b) = FileT (a`mappend`b)
 
@@ -24,8 +24,10 @@ class FileLike a where
   fromFilePath :: FilePath -> a
   combine :: a -> a -> a
   takeBaseName :: a -> a
+  takeFileName :: a -> a
   makeRelative :: a -> a -> a
   replaceExtension :: a -> String -> a
+  takeExtension :: a -> String
   takeDirectory :: a -> a
 
 (</>) :: (FileLike a) => a -> a -> a
@@ -38,6 +40,8 @@ instance FileLike a => FileLike (FileT a) where
   fromFilePath fp = FileT (fromFilePath fp)
   combine (FileT a) (FileT b) = FileT (combine a b)
   takeBaseName (FileT a) = FileT (takeBaseName a)
+  takeFileName (FileT a) = FileT (takeFileName a)
+  takeExtension (FileT a) = takeExtension a
   makeRelative (FileT a) (FileT b) = FileT (makeRelative a b)
   replaceExtension (FileT a) ext = FileT (replaceExtension a ext)
   takeDirectory (FileT a) = FileT (takeDirectory a)
@@ -46,9 +50,11 @@ instance FileLike FilePath where
   fromFilePath = id
   combine = F.combine
   takeBaseName = F.takeBaseName
+  takeFileName = F.takeFileName
   makeRelative = F.makeRelative
   replaceExtension = F.replaceExtension
   takeDirectory = F.takeDirectory
+  takeExtension = F.takeExtension
 
 unpack :: (FileT FilePath) -> FilePath
 unpack (FileT f) = f

@@ -21,10 +21,12 @@ library
                      Development.Cake3.Writer, System.FilePath.Wrapper,
                      Development.Cake3.Monad,
                      Development.Cake3.Rules.UrWeb
+                     Development.Cake3.Utils.Find
 
   build-depends:     base ==4.6.*, haskell-src-meta, template-haskell,
                      QuasiText, filepath, containers, text, monadloc, mtl,
-                     bytestring,deepseq, system-filepath, text-format
+                     bytestring,deepseq, system-filepath, text-format,
+                     directory
 
   hs-source-dirs:    src
 
