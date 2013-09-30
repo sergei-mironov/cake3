@@ -37,11 +37,13 @@ urpparse inp hact sact = do
     parseline True (l:ls) = sact l >> parseline True ls
 
 data Config = Config {
-    urobj :: File -> Rule
+    urObj :: File -> Rule
+  , urInclude :: Variable
   }
 
 defaultConfig = Config {
-  urobj = \f -> rule f (fail "urobj: not set")
+    urObj = \f -> rule f (fail "urobj: not set")
+  , urInclude = makevar "UR_INCLUDE_DIR" "/usr/local/include/urweb"
   }
 
 -- | Build dependencies for the file specified
@@ -69,7 +71,7 @@ urdeps cfg f = do
       | (h=="include") = do
         depend (relative x)
       | (h=="link") = do
-        depend (urobj cfg (relative x))
+        depend (urObj cfg (relative x))
       | otherwise = return ()
 
     src d@(c:_)
@@ -113,16 +115,18 @@ urweb cfg f = urweb' cfg (f .= "urp")
 
 -- | Generate Ur/Web project file @urp@ providing embedded files @files@
 -- FIXME: Generate unique variable name instead of URGCC
-urembed :: File -> [File] -> (CommandGen -> A ()) -> IO Alias
-urembed urp files act = let
+urembed :: Config -> File -> [File] -> IO Alias
+urembed cfg urp files = let
   dir = takeDirectory urp
-  dir_ = string $ toFilePath dir
-  fn = takeFileName urp
-  mf = rule (dir</>(fromFilePath "Makefile")) $ do
-    let gcc = makevar "URGCC" "$(shell urweb -print-ccompiler)"
-    shell [cmd|mkdir -pv $(dir_)|]
-    act [cmd| urembed -d $(string (unpack fn)) -o $(dir_) -c `which $gcc` $files |]
+  dir_ = string (toFilePath dir)
+  urcc = makevar "URCC" "$(shell urweb -print-ccompiler)"
+  gcc = makevar "CC" "$(shell $(URCC) -print-prog-name=gcc)"
+  ld = makevar "LD" "$(shell $(URCC) -print-prog-name=ld)"
   in ruleM urp $ do
-    depend mf
-    shell [cmd|$(extvar "MAKE") -C $(dir_) |]
+    depend $ rule (dir</>(fromFilePath "Makefile")) $ do
+      shell [cmd|mkdir -pv $(dir_)|]
+      shell [cmd|urembed -o $(dir_) $files|]
+    -- FIXME: implement variable dependency
+    depend urcc
+    shell [cmd|$(extvar "MAKE") -C $(dir_) CC=$gcc LD=$ld UR_INCLUDE_DIR=$(urInclude cfg) urp|]
 
