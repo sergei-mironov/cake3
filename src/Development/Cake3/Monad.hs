@@ -74,14 +74,18 @@ addRebuildDeps md rs = M.map mkd rs where
         | otherwise = r
 
 addMakeDeps :: Map Target Recipe2 -> Map Target Recipe2
-addMakeDeps rs = M.map adder rs  where
-  adder r | not(makefileT `dependsOn` r) = r{ rsrc = (S.insert makefileT (rsrc r)) }
-          | otherwise = r
-  dependsOn :: File -> Recipe2 -> Bool
-  dependsOn f r = if f`S.member`(rtgt r) then True else godeeper where
-    godeeper = or $ map (\tgt -> or $ map (dependsOn f) (selectBySrc tgt)) (S.toList $ rtgt r)
+addMakeDeps rs
+  | M.null makeRules = rs
+  | otherwise = M.map addMakeDeps' rs
+  where
+    makeRules = M.filter (\r -> makefileT `S.member` (rtgt r)) rs
+    addMakeDeps' r | not (makefileT `dependsOn` r) = r{ rsrc = (S.insert makefileT (rsrc r)) }
+                   | otherwise = r
+    dependsOn :: File -> Recipe2 -> Bool
+    dependsOn f r = if f`S.member`(rtgt r) then True else godeeper where
+      godeeper = or $ map (\tgt -> or $ map (dependsOn f) (selectBySrc tgt)) (S.toList $ rtgt r)
 
-  selectBySrc f = map snd . M.toList . fst $ M.partition (\r -> f`S.member`(rsrc r)) rs
+    selectBySrc f = map snd . M.toList . fst $ M.partition (\r -> f`S.member`(rsrc r)) rs
 
 flattern :: (Ord x, Ord y, Show y) => Map x (Set y) -> Either String (Map x y)
 flattern m = mapM check1 (M.toList m) >>= \m -> return (M.fromList m) where

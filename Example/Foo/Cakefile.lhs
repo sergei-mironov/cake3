@@ -134,7 +134,7 @@ Finally, default Haskell main function collects all required rules and prints th
 Makefile's contents on a standard output. User should not list all the rules,
 they only need to list top-level rules, he/she wants to see in the Makefile.
 
-> main = runMake $ do
+> main = runMake_ $ do
 >   place all_
 >   place clean
 >   place selfupdate

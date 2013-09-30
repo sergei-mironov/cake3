@@ -13,4 +13,4 @@ fc = (file "file.c") `rule` shell [cmd| echo cc > $(fc) |]
 hehe = rule (file "file.hehe") $ do
   shell [cmd|cat $fa > $hehe |]
 
-main = runMake (place fb >> place hehe)
+main = runMake_ (place fb >> place hehe)

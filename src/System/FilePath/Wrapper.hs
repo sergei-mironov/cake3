@@ -28,7 +28,9 @@ class FileLike a where
   makeRelative :: a -> a -> a
   replaceExtension :: a -> String -> a
   takeExtension :: a -> String
+  takeExtensions :: a -> String
   takeDirectory :: a -> a
+  dropExtensions :: a -> a
 
 (</>) :: (FileLike a) => a -> a -> a
 (</>) = combine
@@ -42,9 +44,11 @@ instance FileLike a => FileLike (FileT a) where
   takeBaseName (FileT a) = FileT (takeBaseName a)
   takeFileName (FileT a) = FileT (takeFileName a)
   takeExtension (FileT a) = takeExtension a
+  takeExtensions (FileT a) = takeExtensions a
   makeRelative (FileT a) (FileT b) = FileT (makeRelative a b)
   replaceExtension (FileT a) ext = FileT (replaceExtension a ext)
   takeDirectory (FileT a) = FileT (takeDirectory a)
+  dropExtensions (FileT a) = FileT (dropExtensions a)
 
 instance FileLike FilePath where
   fromFilePath = id
@@ -55,7 +59,11 @@ instance FileLike FilePath where
   replaceExtension = F.replaceExtension
   takeDirectory = F.takeDirectory
   takeExtension = F.takeExtension
+  takeExtensions = F.takeExtensions
+  dropExtensions = F.dropExtensions
 
 unpack :: (FileT FilePath) -> FilePath
 unpack (FileT f) = f
+
+toFilePath = unpack
 

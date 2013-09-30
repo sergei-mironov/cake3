@@ -1,6 +1,12 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Development.Cake3.Rules.UrWeb(urweb,urembed) where
+module Development.Cake3.Rules.UrWeb(
+    urweb
+  , urembed
+  , Config(..)
+  , defaultConfig
+  , urdeps
+  ) where
 
 import Data.Monoid
 import Data.List
@@ -30,9 +36,17 @@ urpparse inp hact sact = do
       | otherwise = hact (splitWhen ' ' l) >> parseline False ls
     parseline True (l:ls) = sact l >> parseline True ls
 
+data Config = Config {
+    urobj :: File -> Rule
+  }
+
+defaultConfig = Config {
+  urobj = \f -> rule f (fail "urobj: not set")
+  }
+
 -- | Build dependencies for the file specified
-moredeps :: File -> A ()
-moredeps f = do
+urdeps :: Config -> File -> A ()
+urdeps cfg f = do
   ps <- prerequisites
   case f`member`ps of
     True -> return ()
@@ -41,17 +55,29 @@ moredeps f = do
       inp <- C3.readFile f
       urpparse inp lib src
   where
-    lib (h,x) = when (h=="library") $ do
-      let nested = (takeDirectory f) </> (fromFilePath x)
-      isdir <- liftIO $ doesDirectoryExist (unpack nested)
-      case isdir of
-        True -> moredeps (nested </> (fromFilePath "lib.urp"))
-        False -> moredeps (nested .= "urp")
+    relative x = takeDirectory f </> (fromFilePath x)
 
-    src d@(c:_) = when (c/='$') $ do
-      depend ((fromFilePath d) .= "ur" :: File)
-      depend ((fromFilePath d) .= "urs" :: File)
-    src [] = return ()
+    lib (h,x)
+      | (h=="library") = do
+        let nested = relative x
+        isdir <- liftIO $ doesDirectoryExist (unpack nested)
+        case isdir of
+          True -> urdeps cfg (nested </> (fromFilePath "lib.urp"))
+          False -> urdeps cfg (nested .= "urp")
+      | (h=="ffi") = do
+        depend ((relative x) .= "urs")
+      | (h=="include") = do
+        depend (relative x)
+      | (h=="link") = do
+        depend (urobj cfg (relative x))
+      | otherwise = return ()
+
+    src d@(c:_)
+      | (c/='$') = do
+        depend ((relative d) .= "ur" :: File)
+        depend ((relative d) .= "urs" :: File)
+      | otherwise = return ()
+    src _ = return ()
 
 -- | Search for @sect@ in the urp file's header.
 urpline :: String -> String -> IO File
@@ -74,25 +100,29 @@ urpexe f = (takeBaseName f) .= "exe"
 -- executable, one for SQL-file and one for database file
 --
 -- FIXME: Rewrite in urembed style: fill urweb_cmd and pass it back to the user
-urweb' :: File -> A() -> IO (Alias, Alias, Alias)
-urweb' f act = do
+urweb' :: Config -> File -> A() -> IO (Alias, Alias, Alias)
+urweb' cfg f act = do
   c <- liftIO (IO.readFile $ unpack f)
   exe <- return (urpexe f)
   sql <- urpline "sql" c
   db <- urpdb "name" c
-  ruleM (exe,sql,db) (act >> moredeps f)
+  ruleM (exe,sql,db) (act >> urdeps cfg f)
 
-urweb :: File -> A() -> IO (Alias, Alias, Alias)
-urweb f = urweb' (f .= "urp")
+urweb :: Config -> File -> A() -> IO (Alias, Alias, Alias)
+urweb cfg f = urweb' cfg (f .= "urp")
 
 -- | Generate Ur/Web project file @urp@ providing embedded files @files@
 -- FIXME: Generate unique variable name instead of URGCC
 urembed :: File -> [File] -> (CommandGen -> A ()) -> IO Alias
 urembed urp files act = let
   dir = takeDirectory urp
+  dir_ = string $ toFilePath dir
   fn = takeFileName urp
-  in ruleM urp $ do
-    depend (dir`rule`(shell [cmd| mkdir -pv $dir |]))
+  mf = rule (dir</>(fromFilePath "Makefile")) $ do
     let gcc = makevar "URGCC" "$(shell urweb -print-ccompiler)"
-    act [cmd| urembed -d $(string (unpack fn)) -o $dir -c `which $gcc` $files |]
+    shell [cmd|mkdir -pv $(dir_)|]
+    act [cmd| urembed -d $(string (unpack fn)) -o $(dir_) -c `which $gcc` $files |]
+  in ruleM urp $ do
+    depend mf
+    shell [cmd|$(extvar "MAKE") -C $(dir_) |]
 

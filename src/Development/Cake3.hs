@@ -19,8 +19,11 @@ module Development.Cake3 (
   , Make
   , toMake
   , runMake
+  , runMake_
 
   -- Rules
+  , Rule
+  , Rules
   , rule
   , ruleM
   , phony
@@ -35,6 +38,8 @@ module Development.Cake3 (
   , file'
   , (.=)
   , (</>)
+  , toFilePath
+  , fromFilePath
 
   -- Make parts
   , string
@@ -101,10 +106,15 @@ defaultSelfUpdate = rule makefile $ do
     , ref $ string " > "
     , ref makefile]))
 
-runMake :: Make () -> IO ()
-runMake mk = evalMake mk >>= output where
+runMake_ :: Make () -> IO ()
+runMake_ mk = evalMake mk >>= output where
   output (Left err) = hPutStrLn stderr err
   output (Right a) = hPutStrLn stdout (toMake a)
+
+runMake :: Make () -> IO String
+runMake mk = evalMake mk >>= output where
+  output (Left err) = fail err
+  output (Right a) = return (toMake a)
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
 newtype CommandGen = CommandGen (A Command)

@@ -23,7 +23,7 @@ ofiles var = mdo
     shell [cmd| gcc -c -I lib $var -o $o $c |]
   return o
 
-main = runMake $ do
+main = runMake_ $ do
   let var = makevar "CFLAGS" ""
   place $ ofiles var
   place $ clean var
