@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Development.Cake3.Rules.UrWeb(
     urweb
-  , urembed
   , Config(..)
   , defaultConfig
   , urdeps
@@ -37,22 +36,28 @@ urpparse inp hact sact = do
     parseline True (l:ls) = sact l >> parseline True ls
 
 data Config = Config {
-    urObj :: File -> Rule
+    urObjRule :: File -> Rule
   , urInclude :: Variable
+  , urEmbed :: [(String, [File])]
   }
 
 defaultConfig = Config {
-    urObj = \f -> rule f (fail "urobj: not set")
+    urObjRule = \f -> rule f (fail "urobj: not set")
   , urInclude = makevar "UR_INCLUDE_DIR" "/usr/local/include/urweb"
+  , urEmbed = []
   }
 
--- | Build dependencies for the file specified
+-- | Helper function, parses dependencies of an *urp
 urdeps :: Config -> File -> A ()
 urdeps cfg f = do
   ps <- prerequisites
-  case f`member`ps of
-    True -> return ()
-    False -> do
+  let check = msum [ lookup (unpack (takeBaseName f)) (urEmbed cfg)
+                   , lookup (unpack (takeFileName f)) (urEmbed cfg)
+                   ]
+  case check of
+    Just embeddable -> do
+      depend (urembed cfg f embeddable)
+    Nothing -> do
       depend f
       inp <- C3.readFile f
       urpparse inp lib src
@@ -71,7 +76,7 @@ urdeps cfg f = do
       | (h=="include") = do
         depend (relative x)
       | (h=="link") = do
-        depend (urObj cfg (relative x))
+        depend (urObjRule cfg (relative x))
       | otherwise = return ()
 
     src d@(c:_)
@@ -82,51 +87,57 @@ urdeps cfg f = do
     src _ = return ()
 
 -- | Search for @sect@ in the urp file's header.
-urpline :: String -> String -> IO File
-urpline sect c = flip execStateT mempty $ urpparse c lib (const $ return ()) where
-  lib (n,x) | n == sect = put (fromFilePath x)
+urpline :: String -> File -> String -> IO File
+urpline sect f c = flip execStateT mempty $ urpparse c lib (const $ return ()) where
+  relative x = takeDirectory f </> (fromFilePath x)
+  lib (n,x) | n == sect = put (relative x)
             | otherwise = return ()
 
 -- | Search for section @sect@ in the urp file's database line
 -- FIXME: actually supports only 'databse dbname=XXX' format
-urpdb :: String -> String -> IO File
-urpdb dbsect c = flip execStateT mempty $ urpparse c lib (const $ return ()) where
-  lib (n,x) | n == "database" = put (fromFilePath $ snd (splitWhen '=' x))
+urpdb :: String -> File -> String -> IO File
+urpdb dbsect f c = flip execStateT mempty $ urpparse c lib (const $ return ()) where
+  relative x = takeDirectory f </> (fromFilePath x)
+  lib (n,x) | n == "database" = put (relative $ snd (splitWhen '=' x))
             | otherwise = return ()
 
 -- | Get executable name of an URP project
 urpexe :: File -> File
-urpexe f = (takeBaseName f) .= "exe"
+urpexe f = f .= "exe"
 
 -- | Take the URP file and the build action. Provide three aliases: one for
 -- executable, one for SQL-file and one for database file
 --
 -- FIXME: Rewrite in urembed style: fill urweb_cmd and pass it back to the user
-urweb' :: Config -> File -> A() -> IO (Alias, Alias, Alias)
-urweb' cfg f act = do
+urweb :: Config -> File -> A() -> IO (Alias, Alias, Alias)
+urweb cfg f act = do
   c <- liftIO (IO.readFile $ unpack f)
   exe <- return (urpexe f)
-  sql <- urpline "sql" c
-  db <- urpdb "name" c
+  sql <- urpline "sql" f c
+  db <- urpdb "name" f c
   ruleM (exe,sql,db) (act >> urdeps cfg f)
-
-urweb :: Config -> File -> A() -> IO (Alias, Alias, Alias)
-urweb cfg f = urweb' cfg (f .= "urp")
 
 -- | Generate Ur/Web project file @urp@ providing embedded files @files@
 -- FIXME: Generate unique variable name instead of URGCC
-urembed :: Config -> File -> [File] -> IO Alias
-urembed cfg urp files = let
-  dir = takeDirectory urp
-  dir_ = string (toFilePath dir)
-  urcc = makevar "URCC" "$(shell urweb -print-ccompiler)"
-  gcc = makevar "CC" "$(shell $(URCC) -print-prog-name=gcc)"
-  ld = makevar "LD" "$(shell $(URCC) -print-prog-name=ld)"
-  in ruleM urp $ do
-    depend $ rule (dir</>(fromFilePath "Makefile")) $ do
-      shell [cmd|mkdir -pv $(dir_)|]
-      shell [cmd|urembed -o $(dir_) $files|]
-    -- FIXME: implement variable dependency
+-- FIXME: implement variable dependency
+urembed :: Config -> File -> [File] -> Alias
+urembed cfg urp files =
+  let
+    dir = takeDirectory urp
+    makefile = (dir </> takeBaseName urp) .= "mk"
+    dir_ = string dir
+    urp_ = string urp
+    mf_ = string (takeFileName makefile)
+  in rule urp $ do
+    let urcc = makevar "URCC" "$(shell urweb -print-ccompiler)"
+    let gcc = makevar "CC" "$(shell $(URCC) -print-prog-name=gcc)"
+    let ld = makevar "LD" "$(shell $(URCC) -print-prog-name=ld)"
+    let mf = rule makefile $ do
+              -- FIXME: strange recursion occures if uncomment
+              -- depend urp
+              shell [cmd|mkdir -pv $(dir_)|]
+              shell [cmd|urembed -o $(urp_) $files|]
     depend urcc
-    shell [cmd|$(extvar "MAKE") -C $(dir_) CC=$gcc LD=$ld UR_INCLUDE_DIR=$(urInclude cfg) urp|]
+    depend mf
+    shell [cmd|$(extvar "MAKE") -C $(dir_) -f $(mf_) CC=$gcc LD=$ld UR_INCLUDE_DIR=$(urInclude cfg) urp|]
 

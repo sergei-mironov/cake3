@@ -13,6 +13,7 @@ module Development.Cake3 (
   , Referal(..)
   , Placable(..)
   , Reference
+  , ReferenceLike(..)
 
   -- Monads
   , A
@@ -42,7 +43,6 @@ module Development.Cake3 (
   , fromFilePath
 
   -- Make parts
-  , string
   , prerequisites
   , shell
   , cmd
@@ -191,10 +191,19 @@ makevar n v = var n (Just v)
 extvar :: String -> Variable
 extvar n = var n Nothing
 
-string :: String -> Reference
-string s = Reference s
-
 newtype Reference = Reference String
+
+class ReferenceLike a where
+  string :: a -> Reference
+
+instance ReferenceLike String where
+  string s = Reference s
+
+instance ReferenceLike File where
+  string (FileT x) = string x
+
+instance ReferenceLike Alias where
+  string (Alias (x,_,_)) = string x
 
 dst :: A (Set File)
 dst = rtgt <$> get
