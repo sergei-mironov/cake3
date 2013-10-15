@@ -82,7 +82,10 @@ urdeps cfg f = do
     src d@(c:_)
       | (c/='$') = do
         depend ((relative d) .= "ur" :: File)
-        depend ((relative d) .= "urs" :: File)
+        let urs = (relative d) .= "urs"
+        e <- liftIO $ doesFileExist (toFilePath urs)
+        when e $ do
+          depend ((relative d) .= "urs" :: File)
       | otherwise = return ()
     src _ = return ()
 
