@@ -50,7 +50,6 @@ defaultConfig = Config {
 -- | Helper function, parses dependencies of an *urp
 urdeps :: Config -> File -> A ()
 urdeps cfg f = do
-  ps <- prerequisites
   let check = msum [ lookup (unpack (takeBaseName f)) (urEmbed cfg)
                    , lookup (unpack (takeFileName f)) (urEmbed cfg)
                    ]
@@ -76,7 +75,11 @@ urdeps cfg f = do
       | (h=="include") = do
         depend (relative x)
       | (h=="link") = do
-        depend (urObjRule cfg (relative x))
+        let incl = makevar "URCC" "$(shell urweb -print-cinclude)"
+        let cc = makevar "URCC" "$(shell urweb -print-ccompiler)"
+        let obj = rule (relative x) $ do
+                  shell [cmd|$(cc) -c -I $(incl) -o $(relative x) $((relative x) .= "c")|]
+        depend obj
       | otherwise = return ()
 
     src d@(c:_)
