@@ -3,7 +3,7 @@ module Main where
 import System.Environment
 import System.Process
 import System.Exit
-import Paths_thirdcake
+import Paths_cake3
 
 main = do
   args <- getArgs
