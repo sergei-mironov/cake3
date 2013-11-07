@@ -21,6 +21,8 @@ import Development.Cake3
 import Development.Cake3.Types
 import Development.Cake3.Monad as C3
 
+urincl = makevar "URINCL" "$(shell urweb -print-cinclude)"
+
 splitWhen c l = (h,if null t then [] else tail t) where
   (h,t) = span (/=c) l
 
@@ -37,13 +39,11 @@ urpparse inp hact sact = do
 
 data Config = Config {
     urObjRule :: File -> Rule
-  , urInclude :: Variable
   , urEmbed :: [(String, [File])]
   }
 
 defaultConfig = Config {
     urObjRule = \f -> rule f (fail "urobj: not set")
-  , urInclude = makevar "UR_INCLUDE_DIR" "/usr/local/include/urweb"
   , urEmbed = []
   }
 
@@ -75,10 +75,9 @@ urdeps cfg f = do
       | (h=="include") = do
         depend (relative x)
       | (h=="link") = do
-        let incl = makevar "URCC" "$(shell urweb -print-cinclude)"
         let cc = makevar "URCC" "$(shell urweb -print-ccompiler)"
         let obj = rule (relative x) $ do
-                  shell [cmd|$(cc) -c -I $(incl) -o $(relative x) $((relative x) .= "c")|]
+                  shell [cmd|$(cc) -c -I $(urincl) -o $(relative x) $((relative x) .= "c")|]
         depend obj
       | otherwise = return ()
 
@@ -145,5 +144,5 @@ urembed cfg urp files =
               shell [cmd|urembed -o $(urp_) $files|]
     depend urcc
     depend mf
-    shell [cmd|$(extvar "MAKE") -C $(dir_) -f $(mf_) CC=$gcc LD=$ld UR_INCLUDE_DIR=$(urInclude cfg) urp|]
+    shell [cmd|$(extvar "MAKE") -C $(dir_) -f $(mf_) CC=$gcc LD=$ld UR_INCLUDE_DIR=$(urincl) urp|]
 

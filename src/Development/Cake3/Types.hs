@@ -1,5 +1,6 @@
 module Development.Cake3.Types where
 
+import Data.Maybe
 import Data.Monoid
 import qualified Data.List as L
 import Data.List hiding(foldr)
@@ -9,26 +10,6 @@ import qualified Data.Set as S
 import Data.Set (Set)
 
 import System.FilePath.Wrapper
-
--- | Item wich have it's position in the Makefile. Positioned adds the metric to
--- the contained datatype. Note, that the metric is not the subject of Eq or
--- Ord. mappend-ing two metrics results in taking the minimal one.
--- data Pos a = Pos { ppos :: Int, pwhat :: a }
---   deriving(Show, Eq)
-
--- instance Ord a => Ord (Pos a) where
---   compare (Pos p w) (Pos p2 w2) =
---     case p`compare`p2 of
---       EQ -> w`compare`w2
---       x -> x
-
--- instance Monoid a => Monoid (Pos a) where
---   mempty = Pos 0 mempty
---   mappend (Pos a ad) (Pos b bd) = Pos (min a b) (mappend ad bd)
-
--- -- higher positions go first
--- cmpPos (Pos a _) (Pos b _) = a`compare`b
--- unposition (Pos _ x) = x
 
 
 -- | Makefile variable
@@ -63,3 +44,25 @@ data RecipeT v = Recipe {
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
   } deriving(Show, Eq, Ord)
+
+type Recipe = Recipe1
+
+type Recipe1 = RecipeT (Map String (Set Variable))
+
+type Recipe2 = RecipeT (Map String Variable)
+
+type Target = Set File
+
+applyPlacement :: (Eq x) => Map Target (RecipeT x) -> [Target] -> [RecipeT x]
+applyPlacement rs p = nub $ (mapMaybe id $ map (flip M.lookup rs) p) ++ (map snd $ M.toList rs)
+
+mapRecipes :: [RecipeT x] -> Map Target (RecipeT x)
+mapRecipes rs = M.fromList $ map (\r -> (rtgt r,r)) rs
+
+traverseMap :: (Monad m) => ((RecipeT x) -> m [RecipeT x]) -> Map Target (RecipeT x) -> m (Map Target (RecipeT x))
+traverseMap f m = M.foldl' f' (return mempty) m where
+  f' a r = do
+    l <- f r
+    m <- a
+    return (m`mappend`(mapRecipes l))
+

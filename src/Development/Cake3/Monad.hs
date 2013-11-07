@@ -24,22 +24,15 @@ import Text.Printf
 
 import System.FilePath.Wrapper
 
-type Recipe = Recipe1
-
-type Recipe1 = RecipeT (Map String (Set Variable))
-
-type Recipe2 = RecipeT (Map String Variable)
-
 
 type Location = String
-
-type Target = Set File
 
 data MakeState = MS {
     srecipes :: Map Target (Set Recipe1)
   , sloc :: Location
   , makeDeps :: Set File
   , placement :: [Target]
+  , subprojects :: Map File (Set File)
   } deriving(Show)
 
 addPlacement :: RecipeT x -> Make ()
@@ -47,45 +40,50 @@ addPlacement r = modify $ \ms -> ms { placement = (placement ms) ++ [rtgt r] }
 
 modifyRecipes f = modify $ \ms -> ms { srecipes = f (srecipes ms) }
 
-applyPlacement :: (Eq x) => Map Target (RecipeT x) -> [Target] -> [RecipeT x]
-applyPlacement rs p = nub $ (mapMaybe id $ map (flip M.lookup rs) p) ++ (map snd $ M.toList rs)
-
+-- State that contents of the target Makefile depends on a File specified.
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
-defMS = MS mempty mempty mempty mempty
+-- State that subproject (a directory with it's own Makefile) manages the file f
+addSubproject :: File -> File -> Make ()
+addSubproject f p = modify (\ms -> ms { subprojects = M.insertWith mappend p (S.singleton f) (subprojects ms) })
+
+-- Default Make state
+defMS = MS mempty mempty mempty mempty mempty
 
 -- | The File Alias records the file which may be referenced from other rules,
 -- it's "Brothers", and the recipes required to build this file.
 newtype Alias = Alias (File, [File], Make Recipe)
 
--- unalias :: [Alias] -> Make ()
--- unalias as = F.sequence_ $ map (\(Alias (_,_,x)) -> x) as
-
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO, MonadFix)
 
 makefileT :: (FileLike x) => (FileT x)
-makefileT= fromFilePath "Makefile"
+makefileT = fromFilePath "Makefile"
 
 addRebuildDeps :: Set File -> Map Target Recipe2 -> Map Target Recipe2
 addRebuildDeps md rs = M.map mkd rs where
   mkd r | makefileT `S.member` (rtgt r) = r{ rsrc = ((rsrc r) `mappend` md) }
         | otherwise = r
 
+isRequiredFor :: Map Target (RecipeT x) -> (RecipeT x) -> File -> Bool
+isRequiredFor rs r f = if f`S.member`(rtgt r) then True else godeeper where
+  godeeper = or $ map (\tgt -> or $ map (\r -> isRequiredFor rs r f) (selectBySrc tgt)) (S.toList $ rtgt r)
+  selectBySrc f = map snd . M.toList . fst $ M.partition (\r -> f`S.member`(rsrc r)) rs
+
+-- | There are only 2 kind of rules: 1) ones that depend on a Makefile, and 2) ones
+-- that Makefile depends on. Case-2 is known in advance (for example, when the
+-- the contents of a file is required to build a Makefile then Makefile depends
+-- on this file). This function adds the case-1 dependencies.
 addMakeDeps :: Map Target Recipe2 -> Map Target Recipe2
 addMakeDeps rs
   | M.null makeRules = rs
-  | otherwise = M.map addMakeDeps' rs
+  | otherwise = M.map addMakeDeps_ rs
   where
     makeRules = M.filter (\r -> makefileT `S.member` (rtgt r)) rs
-    addMakeDeps' r | not (makefileT `dependsOn` r) = r{ rsrc = (S.insert makefileT (rsrc r)) }
+    isRequiredFor_ = isRequiredFor rs
+    addMakeDeps_ r | not (r `isRequiredFor_` makefileT) = r{ rsrc = (S.insert makefileT (rsrc r)) }
                    | otherwise = r
-    dependsOn :: File -> Recipe2 -> Bool
-    dependsOn f r = if f`S.member`(rtgt r) then True else godeeper where
-      godeeper = or $ map (\tgt -> or $ map (dependsOn f) (selectBySrc tgt)) (S.toList $ rtgt r)
-
-    selectBySrc f = map snd . M.toList . fst $ M.partition (\r -> f`S.member`(rsrc r)) rs
 
 flattern :: (Ord x, Ord y, Show y) => Map x (Set y) -> Either String (Map x y)
 flattern m = mapM check1 (M.toList m) >>= \m -> return (M.fromList m) where
@@ -109,15 +107,15 @@ check rs1 = do
   let rs2 = M.map (\(Recipe a b c d e f) -> let d' = flattern' d in (Recipe a b c d' e f)) rs1'
   return (vs',rs2)
 
--- forMapM :: (Monad m, Ord x, Ord a) => Map x a -> (a -> m b) -> m (Map x b)
--- forMapM s f = F.foldrM (\a b -> f a >>= \a -> return $ M.insert a b) S.empty s
-
+-- | Returns either error or a tuple containing: 1) the set of all variables 2) the set of recipes
+-- 3) the user-defined order of targets in the final Makefile
 evalMake :: Make () -> IO (Either String (Map String Variable, Map Target Recipe2, [Target]))
 evalMake mk = do
   flip evalStateT defMS $ unMake $ mk >> do
     md <- makeDeps <$> get
     rs <- srecipes <$> get
     p <- placement <$> get
+    sp <- subprojects <$> get
     return $ case check rs of
       Left err -> Left err
       Right (v,r) -> Right (v, addMakeDeps $ addRebuildDeps md $ r, p)
@@ -161,9 +159,6 @@ readFile f = do
 
 class Placable a where
   place :: a -> Make ()
-
--- instance Placable (Make ()) where
---   place = id
 
 instance Placable Alias where
   place (Alias (_,_,x)) = do
