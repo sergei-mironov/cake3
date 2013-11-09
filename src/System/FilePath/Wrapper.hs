@@ -1,8 +1,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module System.FilePath.Wrapper where
 
+import Data.Data
+import Data.Typeable
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Trans
@@ -12,7 +15,7 @@ import Data.Monoid
 import Text.Printf
 
 newtype FileT a = FileT a
-  deriving(Show,Eq,Ord)
+  deriving(Show,Eq,Ord,Data,Typeable)
 
 instance (Monoid a) => Monoid (FileT a) where
   mempty = FileT mempty

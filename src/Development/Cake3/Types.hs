@@ -1,7 +1,11 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module Development.Cake3.Types where
 
+import Control.Applicative
 import Data.Maybe
 import Data.Monoid
+import Data.Data
+import Data.Typeable
 import qualified Data.List as L
 import Data.List hiding(foldr)
 import qualified Data.Map as M
@@ -18,7 +22,7 @@ data Variable = Variable {
   , vval :: Maybe String
   -- ^ Nothing means that variable is defined elsewhere (eg. borrowed from the
   -- environment)
-  } deriving(Show, Eq, Ord)
+  } deriving(Show, Eq, Ord, Data, Typeable)
 
 type Vars = Map String (Set Variable)
 
@@ -31,38 +35,46 @@ return_text x = return [Left x]
 return_file x = return [Right x]
 
 -- | Recipe answers to the question 'How to build the targets'
-data RecipeT v = Recipe {
+data Recipe = Recipe {
     rtgt :: Set File
   -- ^ Targets 
   , rsrc :: Set File
   -- ^ Prerequisites
   , rcmd :: [Command]
   -- ^ A list of shell commands
-  , rvars :: v
+  , rvars :: Set Variable
   -- ^ Container of variables
   , rloc :: String
   -- FIXME: actually, PHONY is a file's attribute, not recipe's
   , rphony :: Bool
-  } deriving(Show, Eq, Ord)
+  } deriving(Show, Eq, Ord, Data, Typeable)
 
-type Recipe = Recipe1
+addPrerequisites :: Set File -> Recipe -> Recipe
+addPrerequisites p r = r { rsrc = p`mappend`(rsrc r)}
 
-type Recipe1 = RecipeT (Map String (Set Variable))
-
-type Recipe2 = RecipeT (Map String Variable)
+addPrerequisite :: File -> Recipe -> Recipe
+addPrerequisite f = addPrerequisites (S.singleton f)
 
 type Target = Set File
 
-applyPlacement :: (Eq x) => Map Target (RecipeT x) -> [Target] -> [RecipeT x]
-applyPlacement rs p = nub $ (mapMaybe id $ map (flip M.lookup rs) p) ++ (map snd $ M.toList rs)
+groupSet :: (Ord k, Ord x) => (x -> [k]) -> Set x -> Map k (Set x)
+groupSet keys s = S.foldl' f' mempty s where
+  f' m x = L.foldl' ins m (keys x) where
+    ins m k = M.insertWith mappend k (S.singleton x) m
 
-mapRecipes :: [RecipeT x] -> Map Target (RecipeT x)
-mapRecipes rs = M.fromList $ map (\r -> (rtgt r,r)) rs
+groupRecipes = groupSet (S.toList . rtgt)
 
-traverseMap :: (Monad m) => ((RecipeT x) -> m [RecipeT x]) -> Map Target (RecipeT x) -> m (Map Target (RecipeT x))
-traverseMap f m = M.foldl' f' (return mempty) m where
-  f' a r = do
-    l <- f r
-    m <- a
-    return (m`mappend`(mapRecipes l))
+flattern :: [Set x] -> [x]
+flattern = concat . map S.toList
+
+applyPlacement :: [File] -> Set Recipe  -> [Recipe]
+applyPlacement pl rs = 
+  let placed = nub $ flattern $ catMaybes $ L.map (\k -> M.lookup k (groupRecipes rs)) pl
+      all = S.toList rs
+  in placed ++ (all \\ placed)
+    
+
+transformRecipes :: (Applicative m) => (Recipe -> m (Set Recipe)) -> Set Recipe -> m (Set Recipe)
+transformRecipes f m = S.foldl' f' (pure mempty) m where
+  f' a r = mappend <$> (f r) <*> a
 
