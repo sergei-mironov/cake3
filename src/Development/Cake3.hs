@@ -7,8 +7,7 @@
 
 module Development.Cake3 (
 
-    Alias
-  , Variable
+    Variable
   , Recipe
   , RefInput(..)
   , RefOutput(..)
@@ -23,12 +22,14 @@ module Development.Cake3 (
   , buildMake
   , runMake
   , runMake_
+  , include
 
   -- Rules
   , rule
   , rule'
   , phony
   , depend
+  , before
   , produce
   , unsafe
   , merge
@@ -96,21 +97,29 @@ file' root cwd f' =
 
 selfUpdateRule :: Make Recipe
 selfUpdateRule = do
-  (r,a) <- rule $ do
+  rule $ do
     shell (CommandGen (
       concat <$> sequence [
         refInput $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File)
       , refMerge $ string " > "
       , refOutput makefile]))
-  return r
+
+runMake' :: Make a -> (Either String String -> IO b) -> IO b
+runMake' mk output = do
+  ms <- evalMake (mk >> selfUpdateRule)
+  when (not $ L.null (warnings ms)) $ do
+    hPutStr stderr (warnings ms)
+  when (not $ L.null (errors ms)) $ do
+    fail (errors ms)
+  output (buildMake ms)
 
 runMake_ :: Make a -> IO ()
-runMake_ mk = evalMake (mk >> selfUpdateRule) >>= output . buildMake where
+runMake_ mk = runMake' mk output where
   output (Left err) = hPutStrLn stderr err
   output (Right str) = hPutStrLn stdout str
 
 runMake :: Make a -> IO String
-runMake mk = evalMake (mk >> selfUpdateRule) >>= output . buildMake where
+runMake mk = runMake' mk output where
   output (Left err) = fail err
   output (Right str) = return str
 
@@ -119,23 +128,24 @@ newtype CommandGen = CommandGen { unCommand :: A Command }
 
 withPlacement :: Make (Recipe,a) -> Make (Recipe,a)
 withPlacement mk = do
+  p <- getPlacementPos
   (r,a) <- mk
-  addPlacement (S.findMin (rtgt r))
+  addPlacement p (S.findMin (rtgt r))
   return (r,a)
-
 
 rule' :: A a -> Make (Recipe,a)
 rule' act = do
-  loc <- getLoc
-  runA (loc,False) act
+  (r,a) <- runA act
+  addRecipe r
+  return (r,a)
 
 phony :: String -> A ()
 phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
-rule :: A a -> Make (Recipe,a)
-rule act = withPlacement (rule' act)
+rule :: A a -> Make Recipe
+rule act = fst <$> withPlacement (rule' act)
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()
@@ -151,6 +161,9 @@ shell cmd = do
 
 depend :: (RefInput x) => x -> A ()
 depend x = refInput x >> return ()
+
+before :: Make Recipe -> A ()
+before mx =  liftMake mx >>= refInput >> return ()
 
 produce :: (RefOutput x) => x -> A ()
 produce x = refOutput x >> return ()
@@ -177,10 +190,6 @@ instance ReferenceLike String where
 
 instance ReferenceLike File where
   string (FileT x) = string x
-
-instance ReferenceLike Alias where
-  string (Alias (x,_,_)) = string x
-
 
 class RefMerge x where
   refMerge :: x -> A Command
@@ -220,14 +229,14 @@ instance RefInput File where
     modify $ \r -> r { rsrc = f `insert` (rsrc r)}
     return_file f
 
-instance RefInput (Set File) where
-  refInput as = refInput (S.toList as)
-
-instance RefInput [File] where
-  refInput fs = concat <$> mapM refInput fs
-
 instance RefInput Recipe where
   refInput r = refInput (rtgt r)
+
+instance RefInput x => RefInput [x] where
+  refInput xs = concat <$> mapM refInput xs
+
+instance RefInput x => RefInput (Set x) where
+  refInput xs = refInput (S.toList xs)
 
 instance RefInput x => RefInput (IO x) where
   refInput mx = liftIO mx >>= refInput

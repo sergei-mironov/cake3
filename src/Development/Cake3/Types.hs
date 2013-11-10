@@ -6,8 +6,9 @@ import Data.Maybe
 import Data.Monoid
 import Data.Data
 import Data.Typeable
+import Data.Foldable (foldl')
 import qualified Data.List as L
-import Data.List hiding(foldr)
+import Data.List hiding(foldr, foldl')
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
@@ -57,12 +58,12 @@ addPrerequisite f = addPrerequisites (S.singleton f)
 
 type Target = Set File
 
-groupSet :: (Ord k, Ord x) => (x -> [k]) -> Set x -> Map k (Set x)
-groupSet keys s = S.foldl' f' mempty s where
-  f' m x = L.foldl' ins m (keys x) where
+groupSet :: (Ord k, Ord x) => (x -> Set k) -> Set x -> Map k (Set x)
+groupSet keys s = foldl' f' mempty s where
+  f' m x = foldl' ins m (keys x) where
     ins m k = M.insertWith mappend k (S.singleton x) m
 
-groupRecipes = groupSet (S.toList . rtgt)
+groupRecipes = groupSet rtgt
 
 flattern :: [Set x] -> [x]
 flattern = concat . map S.toList

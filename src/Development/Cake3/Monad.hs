@@ -17,8 +17,9 @@ import qualified Data.Map as M
 import Data.Map(Map)
 import qualified Data.Set as S
 import Data.Set(Set)
-import Data.List as L
+import Data.List as L hiding (foldl')
 import Data.Either
+import Data.Foldable (foldl')
 import qualified Data.Foldable as F
 import qualified Data.Traversable as F
 import Development.Cake3.Types
@@ -36,10 +37,19 @@ data MakeState = MS {
   , makeDeps :: Set File
   , placement :: [File]
   , subprojects :: Map File (Set File)
+  , includes :: Set File
+  , errors :: String
+  , warnings :: String
   } deriving(Show, Data, Typeable)
 
-addPlacement :: File -> Make ()
-addPlacement r = modify $ \ms -> ms { placement = (placement ms) ++ [r] }
+initialMakeState = MS mempty mempty mempty mempty mempty mempty mempty mempty
+
+getPlacementPos :: Make Int
+getPlacementPos = L.length <$> placement <$> get
+
+addPlacement :: Int -> File -> Make ()
+addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms) } where
+  insertInto x xs = let (h,t) = splitAt pos xs in h ++ (x:t)
 
 -- State that target Makefile depends on a File f.
 addMakeDep :: File -> Make ()
@@ -49,52 +59,39 @@ addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 addSubproject :: File -> File -> Make ()
 addSubproject f p = modify (\ms -> ms { subprojects = M.insertWith mappend p (S.singleton f) (subprojects ms) })
 
-initialMakeState = MS mempty mempty mempty mempty mempty
-
 queryVariables :: MakeState -> Set Variable
 queryVariables ms = F.foldl' (\a r -> a`mappend`(rvars r)) mempty (recipes ms)
 
 queryVariablesE :: MakeState -> Either String (Set Variable)
 queryVariablesE ms = check where
   vs = queryVariables ms
-  bads = M.filter (\s -> (S.size s) /= 1) (groupSet (\v -> [vname v]) vs)
+  bads = M.filter (\s -> (S.size s) /= 1) (groupSet (\v -> S.singleton (vname v)) vs)
   check | (M.size bads) > 0 = Left "Some variables share same name"
         | otherwise = Right vs
 
--- | The File Alias represents 1) the file which may be referenced from other rules,
--- 2) it's "Brothers", and 3) the recipe required to build this file and it's
--- brothers.
-newtype Alias = Alias (File, [File], Make Recipe)
+checkForEmptyTarget :: MakeState -> String
+checkForEmptyTarget ms = foldl' checker mempty (recipes ms) where
+  checker es r | S.null (rtgt r) = es++e
+               | otherwise = es where
+    e = printf "Error: Recipe without targets\n\t%s\n" (show r)
+
+checkForTargetConflicts :: MakeState -> String
+checkForTargetConflicts ms = foldl' checker mempty (groupRecipes (recipes ms)) where
+  checker es rs | S.size rs > 1 = es++e
+                | otherwise = es where
+    e = printf "Error: Recipes share one or more targets\n\t%s\n" (show rs)
 
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO, MonadFix)
 
--- flattern :: (Ord x, Ord y, Show y) => Map x (Set y) -> Either String (Map x y)
--- flattern m = mapM check1 (M.toList m) >>= \m -> return (M.fromList m) where
---   check1 (k,s) = do
---     case S.size s of
---       1 -> return (k, S.findMin s)
---       _ -> fail $ printf "More than 1 value describes single entity: %s" (show s)
-
--- flattern' :: (Ord x, Ord y, Show y) => Map x (Set y) -> Map x y
--- flattern' m = M.map check1 m where
---   check1 s = do
---     case S.size s of
---       1 -> S.findMin s
---       _ -> error $ printf "More than 1 value describes single entity: %s" (show s)
-
--- check :: Map Target (Set Recipe) -> Either String (Map String Variable, Map Target Recipe)
--- check rs1 = do
---   rs1' <- flattern rs1
---   let vs = F.foldr (\b a -> M.unionWith mappend a (rvars b)) mempty rs1'
---   vs' <- flattern vs
---   let rs2 = M.map (\(Recipe a b c d e f) -> let d' = flattern' d in (Recipe a b c d' e f)) rs1'
---   return (vs',rs2)
-
 -- | Returns either error or a tuple containing: 1) the set of all variables 2) the set of recipes
 -- 3) the user-defined order of targets in the final Makefile
 evalMake :: Make a -> IO MakeState
-evalMake mk = flip execStateT initialMakeState (unMake mk)
+evalMake mk = do
+  ms <- flip execStateT initialMakeState (unMake mk)
+  return ms {
+    errors = checkForEmptyTarget ms ++ checkForTargetConflicts ms
+  }
 
 modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
 
@@ -105,6 +102,9 @@ addRecipe r = modify $ \ms ->
 
 getLoc :: Make String
 getLoc = sloc <$> get
+
+include :: File -> Make ()
+include f = modify $ \ms -> ms {includes = S.insert f (includes ms)}
 
 instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
@@ -122,11 +122,11 @@ targets = rtgt <$> get
 prerequisites :: A (Set File)
 prerequisites = rsrc <$> get
 
-runA :: (Location, Bool) -> A a -> Make (Recipe, a)
-runA (loc,isPhony) act = do
-  let template = Recipe mempty mempty [] mempty loc isPhony
+runA :: A a -> Make (Recipe, a)
+runA act = do
+  loc <- getLoc
+  let template = Recipe mempty mempty [] mempty loc False
   (a,r) <- runStateT (unA act) template
-  addRecipe r
   return (r,a)
 
 markPhony :: A ()
