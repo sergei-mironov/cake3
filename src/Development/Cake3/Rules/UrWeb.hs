@@ -108,7 +108,7 @@ data Config = Config {
 
 defaultConfig = Config {
     urEmbed = []
-  , urFlags = CommandGen (return [])
+  , urFlags = commandGen (return [])
   }
 
 

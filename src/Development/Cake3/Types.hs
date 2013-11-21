@@ -6,7 +6,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Data
 import Data.Typeable
-import Data.Foldable (foldl')
+import Data.Foldable (Foldable(..), foldl')
 import qualified Data.List as L
 import Data.List hiding(foldr, foldl')
 import qualified Data.Map as M
@@ -35,6 +35,9 @@ type Command = [Either String File]
 return_text x = return [Left x]
 return_file x = return [Right x]
 
+data Flag = Phony | Intermediate
+  deriving(Show,Eq,Ord, Data, Typeable)
+
 -- | Recipe answers to the question 'How to build the targets'
 data Recipe = Recipe {
     rtgt :: Set File
@@ -46,8 +49,7 @@ data Recipe = Recipe {
   , rvars :: Set Variable
   -- ^ Container of variables
   , rloc :: String
-  -- FIXME: actually, PHONY is a file's attribute, not recipe's
-  , rphony :: Bool
+  , rflags :: Set Flag
   } deriving(Show, Eq, Ord, Data, Typeable)
 
 addPrerequisites :: Set File -> Recipe -> Recipe
@@ -78,4 +80,30 @@ applyPlacement pl rs =
 transformRecipes :: (Applicative m) => (Recipe -> m (Set Recipe)) -> Set Recipe -> m (Set Recipe)
 transformRecipes f m = S.foldl' f' (pure mempty) m where
   f' a r = mappend <$> (f r) <*> a
+
+transformRecipesM_ :: (Monad m, Foldable t) => (Recipe -> m ()) -> t Recipe -> m ()
+transformRecipesM_ f rs = foldl' (\a r -> a >> f r) (return mempty) rs
+
+queryVariables :: (Foldable t) => t Recipe -> Set Variable
+queryVariables rs = foldl' (\a r -> a`mappend`(rvars r)) mempty rs
+
+queryVariablesE :: (Foldable t) => t Recipe -> Either String (Set Variable)
+queryVariablesE rs = check where
+  vs = queryVariables rs
+  bads = M.filter (\s -> (S.size s) /= 1) (groupSet (\v -> S.singleton (vname v)) vs)
+  check | (M.size bads) > 0 = Left "Some variables share same name"
+        | otherwise = Right vs
+
+queryTargets :: (Foldable t) => t Recipe -> Set File
+queryTargets rs = foldl' (\a r -> a`mappend`(rtgt r)) mempty rs
+
+
+var :: String -> Maybe String -> Variable
+var n v = Variable n v
+
+makevar :: String -> String -> Variable
+makevar n v = var n (Just v)
+
+extvar :: String -> Variable
+extvar n = var n Nothing
 
