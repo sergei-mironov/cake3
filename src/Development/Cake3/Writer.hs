@@ -226,10 +226,11 @@ buildMake ms = do
       line "GUARD = .GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)"
       r <- runA_ "<internal>" $ do
         produce (queryTargets (recipes ms))
-        commands (prebuilds ms)
+        commands (rcmd $ prebuilds ms)
         commands [[Left "$(MAKE) MAIN=1 $(MAKECMDGOALS)"]]
-        -- shell' [cmd|$(make) MAIN=1 $(makecmdgoals)|]
-        commands (postbuilds ms)
+        commands (rcmd $ postbuilds ms)
+        variables (rvars $ prebuilds ms)
+        variables (rvars $ postbuilds ms)
         markPhony
       writeRules $ fixMultiTarget [r]
 

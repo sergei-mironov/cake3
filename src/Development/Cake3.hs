@@ -21,6 +21,7 @@ module Development.Cake3 (
   , runMake
   , runMake_
   , include
+  , MonadMake(..)
 
   -- Rules
   , rule
@@ -51,6 +52,7 @@ module Development.Cake3 (
   , extvar
   , makefile
   , CommandGen'(..)
+  , make
 
   -- More
   , module Control.Monad

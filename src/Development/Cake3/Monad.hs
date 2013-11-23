@@ -41,19 +41,20 @@ import System.FilePath.Wrapper
 type Location = String
 
 data MakeState = MS {
-    recipes :: Set Recipe
+    prebuilds :: Recipe
+  , postbuilds :: Recipe
+  , recipes :: Set Recipe
   , sloc :: Location
   , makeDeps :: Set File
   , placement :: [File]
-  , prebuilds :: [Command]
-  , postbuilds :: [Command]
   , includes :: Set File
   , errors :: String
   , warnings :: String
-  } deriving(Show, Data, Typeable)
+  }
 
 -- Oh, such a boilerplate
-initialMakeState = MS mempty mempty mempty mempty mempty mempty mempty mempty mempty
+initialMakeState = MS defr defr mempty mempty mempty mempty mempty mempty mempty where
+  defr = emptyRecipe "<internal>"
 
 getPlacementPos :: Make Int
 getPlacementPos = L.length <$> placement <$> get
@@ -66,9 +67,15 @@ addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
-prebuild, postbuild :: Command -> Make ()
-prebuild cmd = modify (\ms -> ms { prebuilds = (prebuilds ms) ++ [cmd] } )
-postbuild cmd = modify (\ms -> ms { postbuilds = (postbuilds ms) ++ [cmd] } )
+prebuild, postbuild :: CommandGen -> Make ()
+prebuild cmdg = do
+  s <- get
+  pb <- fst <$> runA' (prebuilds s) (shell cmdg)
+  put s { prebuilds = pb }
+postbuild cmdg = do
+  s <- get
+  pb <- fst <$> runA' (postbuilds s) (shell cmdg)
+  put s { postbuilds = pb }
 
 -- State that subproject p (a directory with it's own Makefile) manages file f
 -- addSubproject :: File -> [Command] -> Make ()
@@ -86,8 +93,22 @@ checkForTargetConflicts ms = foldl' checker mempty (groupRecipes (recipes ms)) w
                 | otherwise = es where
     e = printf "Error: Recipes share one or more targets\n\t%s\n" (show rs)
 
+
+class (Monad m) => MonadMake m where
+  liftMake :: Make a -> m a
+
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO, MonadFix)
+
+instance MonadMake Make where
+  liftMake = id
+
+instance (MonadMake m) => MonadMake (A' m) where
+  liftMake m = A' (lift (liftMake m))
+
+instance (MonadMake m) => MonadMake (StateT s m) where
+  liftMake = lift . liftMake
+
 
 -- | Returns either error or a tuple containing: 1) the set of all variables 2) the set of recipes
 -- 3) the user-defined order of targets in the final Makefile
@@ -120,11 +141,13 @@ newtype A' m a = A' { unA' :: StateT Recipe m a }
 
 type A a = A' Make a
 
-runA :: (Monad m) => String -> A' m a -> m (Recipe, a)
-runA loc act = do
-  let template = Recipe mempty mempty [] mempty loc mempty
-  (a,r) <- runStateT (unA' act) template
+runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
+runA' r act = do
+  (a,r) <- runStateT (unA' act) r
   return (r,a)
+
+runA :: (Monad m) => String -> A' m a -> m (Recipe, a)
+runA loc act = runA' (emptyRecipe loc) act
 
 runA_ :: (Monad m) => String -> A' m a -> m Recipe
 runA_ loc act = runA loc act >>= return .fst
@@ -143,9 +166,6 @@ markPhony = modify $ \r -> r { rflags = S.insert Phony (rflags r) }
 
 markIntermediate :: (Monad m) => A' m ()
 markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) }
-
-liftMake :: (Monad m) => m a -> A' m a
-liftMake mk = A' (lift mk)
 
 readFile :: File -> A String
 readFile f = do
@@ -246,6 +266,9 @@ instance RefInput m x => RefInput m (Set x) where
 
 instance (MonadIO m, RefInput m x) => RefInput m (IO x) where
   refInput mx = liftIO mx >>= refInput
+
+instance (MonadMake m) => RefInput m (Make Recipe) where
+  refInput mr = liftMake mr >>= refInput
 
 depend :: (RefInput m x) => x -> A' m ()
 depend x = refInput x >> return ()

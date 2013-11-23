@@ -52,6 +52,9 @@ data Recipe = Recipe {
   , rflags :: Set Flag
   } deriving(Show, Eq, Ord, Data, Typeable)
 
+emptyRecipe :: String -> Recipe
+emptyRecipe loc = Recipe mempty mempty mempty mempty loc mempty
+
 addPrerequisites :: Set File -> Recipe -> Recipe
 addPrerequisites p r = r { rsrc = p`mappend`(rsrc r)}
 
@@ -106,4 +109,6 @@ makevar n v = var n (Just v)
 
 extvar :: String -> Variable
 extvar n = var n Nothing
+
+make = extvar "MAKE"
 
