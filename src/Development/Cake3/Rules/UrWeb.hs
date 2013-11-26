@@ -10,6 +10,7 @@ module Development.Cake3.Rules.UrWeb(
 import Data.Monoid
 import Data.List
 import Data.Set (member)
+import qualified Data.Text as T 
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.State
@@ -40,8 +41,8 @@ urpparse inp hact sact = do
 -- | Helper function, parses dependencies of an *urp
 urdeps :: Config -> File -> A ()
 urdeps cfg f = do
-  let check = msum [ lookup (unpack (takeBaseName f)) (urEmbed cfg)
-                   , lookup (unpack (takeFileName f)) (urEmbed cfg)
+  let check = msum [ lookup (takeBaseName f) (urEmbed cfg)
+                   , lookup (takeFileName f) (urEmbed cfg)
                    ]
   case check of
     Just embeddable -> do
@@ -52,14 +53,14 @@ urdeps cfg f = do
       inp <- C3.readFile f
       urpparse inp lib src
   where
-    relative x = takeDirectory f </> (fromFilePath x)
+    relative x = takeDirectory f </> x
 
     lib (h,x)
       | (h=="library") = do
         let nested = relative x
-        isdir <- liftIO $ doesDirectoryExist (unpack nested)
+        isdir <- liftIO $ doesDirectoryExist (toFilePath nested)
         case isdir of
-          True -> urdeps cfg (nested </> (fromFilePath "lib.urp"))
+          True -> urdeps cfg (nested </> "lib.urp")
           False -> urdeps cfg (nested .= "urp")
       | (h=="ffi") = do
         depend ((relative x) .= "urs")
@@ -85,7 +86,7 @@ urdeps cfg f = do
 -- | Search for @sect@ in the urp file's header.
 urpline :: String -> File -> String -> File
 urpline sect f c = flip execState mempty $ urpparse c lib (const $ return ()) where
-  relative x = takeDirectory f </> (fromFilePath x)
+  relative x = takeDirectory f </> x
   lib (n,x) | n == sect = put (relative x)
             | otherwise = return ()
 
@@ -93,7 +94,7 @@ urpline sect f c = flip execState mempty $ urpparse c lib (const $ return ()) wh
 -- FIXME: actually supports only 'databse dbname=XXX' format
 urpdb :: String -> File -> String -> File
 urpdb dbsect f c = flip execState mempty $ urpparse c lib (const $ return ()) where
-  relative x = takeDirectory f </> (fromFilePath x)
+  relative x = takeDirectory f </> x
   lib (n,x) | n == "database" = put (relative $ snd (splitWhen '=' x))
             | otherwise = return ()
 
@@ -124,7 +125,7 @@ data Urp = Urp {
 -- executable, one for SQL-file and one for database file
 withUrp :: File -> (Urp -> Make a) -> Make a
 withUrp f h = do
-  c <- liftIO (IO.readFile $ unpack f)
+  c <- liftIO (IO.readFile $ toFilePath f)
   h Urp{
       urweb = \cfg -> do
         let exe = urpexe f

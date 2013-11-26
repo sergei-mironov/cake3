@@ -1,156 +1,381 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Development.Cake3.Rules.UrWeb2 where
 
+import Data.Data
+import Data.Char
+import Data.Typeable
+import Data.Generics
 import Data.Maybe
 import Data.Monoid
-import Data.List
+import Data.List ()
+import qualified Data.List as L
 import Data.Set (Set)
-import Data.Set as S
+import qualified Data.Set as S
+import Data.Foldable (Foldable(..), foldl')
+import qualified Data.Foldable as F
+import Data.ByteString.Char8 (ByteString(..))
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.Text as T
+import Data.String
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Writer
-import Network.Mime (guessMime)
+import Control.Monad.Error
+import Language.JavaScript.Parser
+import Network.Mime (defaultMimeLookup)
 import System.Directory
 import Text.Printf
+import qualified System.FilePath as F
 import System.IO as IO
 
 import System.FilePath.Wrapper
 import Development.Cake3
--- import Development.Cake3.Types
--- import Development.Cake3.Monad
 
+data UrpAllow = UrpMime | UrpUrl
+  deriving(Show,Data,Typeable)
+
+data UrpRewrite = UrpStyle
+  deriving(Show,Data,Typeable)
+
+data UrpHdrToken = UrpDatabase String
+                 | UrpSql File
+                 | UrpAllow UrpAllow String
+                 | UrpRewrite UrpRewrite String
+                 | UrpLibrary File
+                 | UrpDebug
+                 | UrpInclude File
+                 | UrpLink File
+                 | UrpFFI File
+                 | UrpJSFunc String String
+                 | UrpSafeGet String
+  deriving(Show,Data,Typeable)
+
+data UrpModToken
+  = UrpModule1 File
+  | UrpModule2 File File
+  | UrpModuleSys String
+  deriving(Show,Data,Typeable)
+
+data Urp = Urp {
+    urp :: File
+  , uexe :: Maybe File
+  , uhdr :: [UrpHdrToken]
+  , umod :: [UrpModToken]
+  } deriving(Show,Data,Typeable)
+
+newtype UWLib = UWLib Urp
+  deriving (Show,Data,Typeable)
+
+newtype UWExe = UWExe Urp
+  deriving (Show,Data,Typeable)
+
+instance (Monad m) => RefInput m UWLib where
+  refInput (UWLib u) = refInput (urp u)
+ 
+instance (Monad m) => RefInput m UWExe where
+  refInput (UWExe u) = refInput (urpExe u)
+ 
+
+urpDeps :: Urp -> [File]
+urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
+  scan1 a (UrpLink f) = f:a
+  scan1 a (UrpInclude f) = f:a
+  scan1 a _ = a
+  scan2 a (UrpModule1 f) = f:a
+  scan2 a (UrpModule2 f1 f2) = f1:f2:a
+  scan2 a _ = a
+
+urpSql' :: Urp -> Maybe File
+urpSql' (Urp _ _ hdr _) = find hdr where
+  find [] = Nothing
+  find ((UrpSql f):hs) = Just f
+  find (h:hs) = find hs
+
+urpSql :: Urp -> File
+urpSql u = case urpSql' u of
+  Nothing -> error "ur project defines no SQL file"
+  Just sql -> sql
+
+urpObjs (Urp _ _ hdr _) = foldl' scan [] hdr where
+  scan a (UrpLink f) = f:a
+  scan a _ = a
+
+urpLibs (Urp _ _ hdr _) = foldl' scan [] hdr where
+  scan a (UrpLibrary f) = f:a
+  scan a _ = a
+
+urpExe u = case uexe u of
+  Nothing -> error "ur project defines no EXE file"
+  Just exe -> exe
 
 data UrpState = UrpState {
-    sqlfile :: Maybe File
-  , uhdr :: [String]
-  , ubdy :: [String]
-  , ulibs :: [File]
-  , udeps :: [File]
-  , uobjs :: [File]
+    urpst :: Urp
   } deriving (Show)
 
-defState = UrpState Nothing mempty mempty mempty mempty mempty
+defState urp = UrpState (Urp urp Nothing [] [])
 
-newtype Urp a = Urp { unUrp :: StateT UrpState Make a }
-  deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake)
+class ToUrpWord a where
+  toUrpWord :: a -> String
 
+instance ToUrpWord UrpAllow where
+  toUrpWord (UrpMime) = "mime"
+  toUrpWord (UrpUrl) = "url"
+
+instance ToUrpWord UrpRewrite where
+  toUrpWord (UrpStyle) = "style"
+
+class ToUrpLine a where
+  toUrpLine :: FilePath -> a -> String
+
+instance ToUrpLine UrpHdrToken where
+  toUrpLine up (UrpDatabase dbs) = printf "database %s" dbs
+  toUrpLine up (UrpSql f) = printf "sql %s" (up </> toFilePath f)
+  toUrpLine up (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
+  toUrpLine up (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
+  toUrpLine up (UrpLibrary f) = printf "library %s" (up </> toFilePath (dropExtensions f))
+  toUrpLine up (UrpDebug) = printf "debug"
+  toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
+  toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
+  toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
+  toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
+
+instance ToUrpLine UrpModToken where
+  toUrpLine up (UrpModule1 f) = up </> toFilePath (dropExtensions f)
+  toUrpLine up (UrpModule2 f _) = up </> toFilePath (dropExtensions f)
+  toUrpLine up (UrpModuleSys s) = printf "$/%s" s
+
+newtype UrpGen a = UrpGen { unUrpGen :: StateT UrpState Make a }
+  deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
 toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-runUrp :: String -> Urp () -> Make ()
-runUrp urpfile_ m = do
-  let urpfile = fromFilePath urpfile_
-  ((),s) <- runStateT (unUrp m) defState
-  let exefile = urpfile .= "exe"
-
+uwlib :: File -> UrpGen () -> Make UWLib
+uwlib urpfile m = do
+  ((),s) <- runStateT (unUrpGen m) (defState urpfile)
+  let u@(Urp _ _ hdr mod) = urpst s
+  let up = urpUp urpfile
   toFile urpfile $ do
-    forM (uhdr s) line
+    forM hdr (line . toUrpLine up)
     line ""
-    forM (ubdy s) line
-
-  rule $ do
-    depend $ rule $ do
-      produce urpfile
-      forM_ (udeps s) $ \f -> do
-        depend f
-    produce exefile
-    when ((sqlfile s) /= Nothing) $ do
-      produce (fromJust $ sqlfile s)
-    shell [cmd|urweb $(string $ takeBaseName urpfile)|]
-
-  forM_ (uobjs s) $ \o -> do
+    forM mod (line . toUrpLine up)
+  forM_ (urpObjs u) $ \o -> do
     let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
     let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
     rule $ do
       shell [cmd| $cc -c -I $incl -o %o @(o .= "c") |]
+  rule $ do
+    depend (urpDeps u)
+    depend (urpLibs u)
+    shell [cmd|touch %urpfile|]
+  return $ UWLib u
 
-  forM_ (ulibs s) $ \l -> do
-    prebuild [cmd| $make -C @l |]
-
-  return ()
-
+uwapp :: String -> File -> UrpGen () -> Make UWExe
+uwapp opts urpfile m = do
+  (UWLib u') <- uwlib urpfile m
+  let u = u' { uexe = Just (urpfile .= "exe") }
+  rule $ do
+    depend urpfile
+    produce (urpExe u)
+    case urpSql' u of
+      Nothing -> return ()
+      Just sql -> produce sql
+    shell [cmd|urweb $(string opts) $(string ((takeDirectory urpfile)</>(takeBaseName urpfile)))|]
+  return $ UWExe u
 
 liftUrp m = m
 
-liftMake m = Urp (lift m)
+addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
+addMod m = modify $ \s -> let u = urpst s in s { urpst = u { umod = (umod u) ++ [m] } }
 
-addHdr h = modify $ \s -> s { uhdr = (uhdr s) ++ [h]} 
-
-dependOnFile f = modify $ \s -> s { udeps = (udeps s) ++ [f]} 
-
-addModule f = do
-  modify $ \s -> s { ubdy = (ubdy s) ++ [f]} 
-  when ((f !! 0) /= '$') $ do
-    dependOnFile (fromFilePath f .= "ur")
-    dependOnFile (fromFilePath f .= "urs")
-
-database :: String -> Urp ()
-database db = addHdr $ printf "database %s" db
+database :: String -> UrpGen ()
+database dbs = addHdr $ UrpDatabase dbs
   
-allow :: String -> String -> Urp ()
-allow t p = addHdr $ printf "allow %s %s" t p
+allow :: UrpAllow -> String -> UrpGen ()
+allow a s = addHdr $ UrpAllow a s
 
-rewrite :: String -> String -> Urp ()
-rewrite a b = addHdr $ printf "rewrite %s %s" a b
+rewrite :: UrpRewrite -> String -> UrpGen ()
+rewrite a s = addHdr $ UrpRewrite a s
 
-library :: String -> Urp ()
-library l = do
-  modify $ \s -> s { ulibs = (ulibs s) ++ [fromFilePath l]} 
-  addHdr ("library " ++ l)
+urpUp :: File -> FilePath
+urpUp f = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory $ toFilePath f
 
-ur :: String -> Urp ()
-ur s = addModule s
+newtype UrEmbed = Urembed File
+  deriving (Show)
 
-debug :: Urp ()
-debug = addHdr "debug"
+data UrpLibReference
+  = UrpLibStandalone File 
+  | UrpLibInternal UWLib
+  | UrpLibEmbed UrEmbed
+  deriving(Show)
 
-include :: FilePath -> Urp ()
-include f = do
-  addHdr $ printf "include %s" f
-  dependOnFile (fromFilePath f)
+library' :: File -> UrpGen ()
+library' l = do
+  when ((takeExtension l) /= ".urp") $ do
+    fail "library declaration for %s should ends with '.urp'" (toFilePath l)
+  addHdr $ UrpLibrary l
 
-link :: FilePath -> Urp ()
-link f = do
-  addHdr $ printf "link %s" f
-  modify $ \s -> s { uobjs = (uobjs s) ++ [fromFilePath f] }
-  dependOnFile (fromFilePath f)
+library :: UrpLibReference -> UrpGen ()
+library (UrpLibStandalone l) = do
+  library' l
+  when ((toFilePath $ takeDirectory l) /= ".") $ do
+    prebuild [cmd| $make -C @(takeDirectory l) |]
+library (UrpLibInternal (UWLib u)) = library' (urp u)
+library (UrpLibEmbed ue) = error "urembed is not defined"
 
-ffi :: String -> Urp ()
-ffi s = addHdr $ printf "ffi %s" s
+standalone f = UrpLibStandalone f
+internal u = UrpLibInternal u
+embed e = UrpLibEmbed e
 
-sql :: String -> Urp ()
-sql f = do
-  addHdr $ printf "sql %s" f
-  modify $ \s -> s { sqlfile = Just (fromFilePath f) }
+module_ :: UrpModToken -> UrpGen ()
+module_ = addMod
+
+pair f = UrpModule2 (f.="ur") (f.="urs")
+single f = UrpModule1 f
+sys s = UrpModuleSys s
+
+debug :: UrpGen ()
+debug = addHdr $ UrpDebug
+
+include :: File -> UrpGen ()
+include f = addHdr $ UrpInclude f
+
+link :: File -> UrpGen ()
+link f = addHdr $ UrpLink f
+
+ffi :: File -> UrpGen ()
+ffi s = addHdr $ UrpFFI s
+
+sql :: File -> UrpGen ()
+sql f = addHdr $ UrpSql f
   
+jsFunc n s = addHdr $ UrpJSFunc n s
 
-binaryFile :: File -> Urp ()
-binaryFile inf = 
+safeGet s = addHdr $ UrpSafeGet s
 
-  liftMake $ addMakeDep inf
+url = UrpUrl
 
-  let modname = (mkname inf)
-  let modname_c = modname ++ "_c"
-  let blobname = modname ++ "_c_blob"
-  let modname_js = modname ++ "_js"
-  let mime = guessMime inf
+mime = UrpMime
 
-  content <- liftIO $ BS.readFile inf
+style = UrpStyle
 
-  let csrc = replaceExtension modname_c ".c"
-  toFile csrc $ do
-    line $ "// Thanks, http://stupefydeveloper.blogspot.ru/2008/08/cc-embed-binary-data-into-elf.html"
+guessMime inf = fixup $ BS.unpack (defaultMimeLookup (fromString inf)) where
+  fixup "application/javascript" = "text/javascript"
+  fixup m = m
+
+data JSFunc = JSFunc {
+    urdecl :: String
+  , urname :: String
+  , jsname :: String
+  } deriving(Show)
+
+data JSType = JSType {
+    urtdecl :: String
+  } deriving(Show)
+
+-- | Parse the JavaScript file, extract top-level functions, convert their
+-- signatures into Ur/Web format, return them as the list of strings
+parse_js :: BS.ByteString -> Make (Either String ([JSType],[JSFunc]))
+parse_js contents = do
+  runErrorT $ do
+    c <- either fail return (parse (BS.unpack contents) "<urembed_input>")
+    f <- concat <$> (forM (findTopLevelFunctions c) $ \f@(fn:_) -> (do
+      ts <- mapM extractEmbeddedType (f`zip`(False:repeat True))
+      let urdecl_ = urs_line ts
+      let urname_ = (fst (head ts))
+      let jsname_ = fn
+      return [JSFunc urdecl_ urname_ jsname_]
+      ) `catchError` (\(e::String) -> do
+        err $ printf "ignoring function %s, reason:\n\t%s" fn e
+        return []))
+    t <- concat <$> (forM (findTopLevelVars c) $ \vn -> (do
+      (n,t) <- extractEmbeddedType (vn,False)
+      return [JSType $ printf "type %s" t]
+      )`catchError`  (\(e::String) -> do
+        err $ printf "ignoring variable %s, reason:\n\t%s" vn e
+        return []))
+    return (t,f)
+
+  where
+    urs_line :: [(String,String)] -> String
+    urs_line [] = error "wrong function signature"
+    urs_line ((n,nt):args) = printf "val %s : %s" n (fmtargs args) where
+      fmtargs :: [(String,String)] -> String
+      fmtargs ((an,at):as) = printf "%s -> %s" at (fmtargs as)
+      fmtargs [] = let pf = L.stripPrefix "pure_" nt in
+                   case pf of
+                     Just p -> p
+                     Nothing -> printf "transaction %s" nt
+
+    extractEmbeddedType :: (Monad m) => (String,Bool) -> m (String,String)
+    extractEmbeddedType ([],_) = error "BUG: empty identifier"
+    extractEmbeddedType (name,fallback) = check (msum [span2  "__" name , span2 "_as_" name]) where
+      check (Just (n,t)) = return (n,t)
+      check _ | fallback == True = return (name,name)
+              | fallback == False = fail $ printf "Can't extract the type from the identifier '%s'" name
+
+    findTopLevelFunctions :: JSNode -> [[String]]
+    findTopLevelFunctions top = map decls $ listify is_func top where
+      is_func n@(JSFunction a b c d e f) = True
+      is_func _ = False
+      decls (JSFunction a b c d e f) = (identifiers b) ++ (identifiers d)
+
+    findTopLevelVars :: JSNode -> [String]
+    findTopLevelVars top = map decls $ listify is_var top where
+      is_var n@(JSVarDecl a []) = True
+      is_var _ = False
+      decls (JSVarDecl a _) = (head $ identifiers a);
+      
+    identifiers x = map name $ listify ids x where
+      ids i@(JSIdentifier s) = True
+      ids _ = False
+      name (JSIdentifier n) = n
+
+    err,out :: (MonadIO m) => String -> m ()
+    err = hio stderr
+    out = hio stdout
+
+    span2 :: String -> String -> Maybe (String,String)
+    span2 inf s = span' [] s where
+      span' _ [] = Nothing
+      span' acc (c:cs)
+        | L.isPrefixOf inf (c:cs) = Just (acc, drop (length inf) (c:cs))
+        | otherwise = span' (acc++[c]) cs
+
+    hio :: (MonadIO m) => Handle -> String -> m ()
+    hio h = liftIO . hPutStrLn h
+
+bin :: File -> File -> UrpGen ()
+bin dir src = do
+  c <- readFileForMake src
+  bin' dir (toFilePath src) c
+
+bin' :: File -> FilePath -> BS.ByteString -> UrpGen ()
+bin' dir src_name src_contents = do
+
+  let mime = guessMime src_name
+  let mn = (mkname src_name)
+  let wrapmod ext = (dir </> mn) .= ext
+  let binmod ext = (dir </> (mn ++ "_c")) .= ext
+  let jsmod ext = (dir </> (mn ++ "_js")) .= ext
+
+  -- Binary module
+  let binfunc = printf "uw_%s_binary" (modname binmod)
+  let textfunc = printf "uw_%s_text" (modname binmod)
+  toFile (binmod ".c") $ do
+    line $ "/* Thanks, http://stupefydeveloper.blogspot.ru/2008/08/cc-embed-binary-data-into-elf.html */"
     line $ "#include <urweb.h>"
     line $ "#include <stdio.h>"
-    -- let start = printf "_binary___%s_start" blobname
-    -- let size = printf "_binary___%s_size" blobname
-    line $ printf "#define BLOBSZ %d" (BS.length content)
+    line $ printf "#define BLOBSZ %d" (BS.length src_contents)
     line $ "static char blob[BLOBSZ];"
     line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit)"
     line $ "{"
@@ -177,60 +402,46 @@ binaryFile inf =
     line $ "  }"
     line $ ""
 
-  let append f wr = BS.appendFile (indest f) $ execWriter $ wr
-  append (toFilePath csrc) $ do
+  let append f wr = liftIO $ BS.appendFile f $ execWriter $ wr
+  append (toFilePath (binmod ".c")) $ do
     let line s = tell ((BS.pack s)`mappend`(BS.pack "\n"))
     line $ ""
     line $ "static char blob[BLOBSZ] = {"
-    let buf = reverse $ BS.foldl (\a c -> (BS.pack (printf "0x%02X ," c)) : a) [] content
+    let buf = reverse $ BS.foldl (\a c -> (BS.pack (printf "0x%02X ," c)) : a) [] src_contents
     tell (BS.concat buf)
     line $ "};"
     line $ ""
 
-  let header = (replaceExtension modname_c ".h")
-  write header $ do
+  toFile (binmod ".h") $ do
     line $ "#include <urweb.h>"
     line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit);"
     line $ "uw_Basis_string " ++ textfunc ++ " (uw_context ctx, uw_unit unit);"
 
-  let binobj = replaceExtension modname_c ".o"
-  -- let dataobj = replaceExtension modname_c ".data.o"
+  toFile (binmod ".urs") $ do
+    line $ "val binary : unit -> transaction blob"
+    line $ "val text : unit -> transaction string"
 
-  write (replaceExtension modname_c ".urp") $ do
-    line $ "ffi " ++ modname_c
-    line $ "include " ++ header
-    line $ "link " ++ binobj
-    -- line $ "link " ++ dataobj
+  include (binmod ".h")
+  link (binmod ".o")
+  ffi (binmod ".urs")
 
-  -- Copy the file to the target dir and run linker from there. Thus the names
-  -- it places will be correct (see start,size in _c)
-  -- copyFile inf (indest blobname)
-
-  -- Module_js.urp
-  (jstypes,jsdecls) <- if ((takeExtension inf) == ".js") then do
-                          e <- parse_js inf
+  -- JavaScript FFI Module
+  (jstypes,jsdecls) <- if ((takeExtension src_name) == ".js") then do
+                          e <- liftMake $ parse_js src_contents
                           case e of
                             Left e -> do
-                              err $ printf "Error while parsing %s" (takeFileName inf)
-                              fail e
+                              fail $ printf "Error while parsing %s" src_name
                             Right decls -> do
-                              -- err (show decls)
                               return decls
                        else
                           return ([],[])
 
-  write (replaceExtension modname_js ".urs") $ do
+  toFile (jsmod ".urs") $ do
     forM_ jstypes $ \decl -> line (urtdecl decl)
     forM_ jsdecls $ \decl -> line (urdecl decl)
-
-  write (replaceExtension modname_js ".urp") $ do
-    line $ "ffi " ++ modname_js
-    forM_ jsdecls $ \decl -> do
-      line $ printf "jsFunc %s.%s = %s" modname_js (urname decl) (jsname decl)
-      line $ printf "benignEffectful %s.%s" modname_js (urname decl)
   
-  -- Module.urp
-  write (replaceExtension modname ".urs") $ do
+  -- Wrapper module
+  toFile (wrapmod ".urs") $ do
     line $ "val binary : unit -> transaction blob"
     line $ "val text : unit -> transaction string"
     line $ "val blobpage : unit -> transaction page"
@@ -238,30 +449,35 @@ binaryFile inf =
     forM_ jstypes $ \decl -> line (urtdecl decl)
     forM_ jsdecls $ \d -> line (urdecl d)
 
-  write (replaceExtension modname ".ur") $ do
-    line $ "val binary = " ++ modname_c ++ ".binary"
-    line $ "val text = " ++ modname_c ++ ".text"
+  toFile (wrapmod ".ur") $ do
+    line $ "val binary = " ++ modname binmod ++ ".binary"
+    line $ "val text = " ++ modname binmod ++ ".text"
     forM_ jsdecls $ \d ->
-      line $ printf "val %s = %s.%s" (urname d) modname_js (urname d)
+      line $ printf "val %s = %s.%s" (urname d) (modname jsmod) (urname d)
     line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mime
     line $ "val geturl = url(blobpage {})"
 
-  write (replaceExtension modname ".urp") $ do
-    line $ "library " ++ modname_c
-    line $ "library " ++ modname_js
-    line $ printf "safeGet %s/blobpage" modname
-    line $ printf "safeGet %s/blob" modname
-    line $ ""
-    line $ modname
+  forM_ jsdecls $ \decl -> do
+    jsFunc (printf "%s.%s = %s" (modname jsmod) (urname decl)) (jsname decl)
+  ffi (jsmod ".urs")
+
+  safeGet $ printf "%s/blobpage" (modname wrapmod)
+  safeGet $ printf "%s/blob" (modname wrapmod)
+  module_ (pair $ wrapmod ".ur")
 
   where
 
-    mkname :: File -> File
-    mkname f = fromFilePath . upper1 . notnum . map under . takeFileName $ toFilePath f where
+    mkname :: FilePath -> String
+    mkname = upper1 . notnum . map under . takeFileName where
       under c | c`elem`"_-. /" = '_'
               | otherwise = c
       upper1 [] = []
       upper1 (x:xs) = (toUpper x) : xs
       notnum n@(x:xs) | isDigit x = "f" ++ n
                       | otherwise = n
+
+    modname :: (String -> File) -> String
+    modname f = upper1 . takeBaseName $ f ".urs" where
+      upper1 [] = []
+      upper1 (x:xs) = (toUpper x) : xs
 

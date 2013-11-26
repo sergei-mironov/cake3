@@ -17,35 +17,41 @@ import Text.Printf
 newtype FileT a = FileT a
   deriving(Show,Eq,Ord,Data,Typeable)
 
+type File = FileT FilePath
+
+toFilePath :: (FileT FilePath) -> FilePath
+toFilePath (FileT f) = f
+
+fromFilePath :: FilePath -> FileT FilePath
+fromFilePath f = FileT f
+
 instance (Monoid a) => Monoid (FileT a) where
   mempty = FileT mempty
   mappend (FileT a) (FileT b) = FileT (a`mappend`b)
 
-type File = FileT FilePath
-
 class FileLike a where
-  fromFilePath :: FilePath -> a
-  combine :: a -> a -> a
-  takeBaseName :: a -> a
-  takeFileName :: a -> a
+  -- fromFilePath :: FilePath -> a
+  combine :: a -> String -> a
+  takeDirectory :: a -> a
+  takeBaseName :: a -> String
+  takeFileName :: a -> String
   makeRelative :: a -> a -> a
   replaceExtension :: a -> String -> a
   takeExtension :: a -> String
   takeExtensions :: a -> String
-  takeDirectory :: a -> a
   dropExtensions :: a -> a
 
-(</>) :: (FileLike a) => a -> a -> a
+(</>) :: (FileLike a) => a -> String -> a
 (</>) = combine
 
 (.=) :: (FileLike a) => a -> String -> a
 (.=) = replaceExtension
 
 instance FileLike a => FileLike (FileT a) where
-  fromFilePath fp = FileT (fromFilePath fp)
-  combine (FileT a) (FileT b) = FileT (combine a b)
-  takeBaseName (FileT a) = FileT (takeBaseName a)
-  takeFileName (FileT a) = FileT (takeFileName a)
+  -- fromFilePath fp = FileT (fromFilePath fp)
+  combine (FileT a) b = FileT (combine a b)
+  takeBaseName (FileT a) = takeBaseName a
+  takeFileName (FileT a) = takeFileName a
   takeExtension (FileT a) = takeExtension a
   takeExtensions (FileT a) = takeExtensions a
   makeRelative (FileT a) (FileT b) = FileT (makeRelative a b)
@@ -54,7 +60,7 @@ instance FileLike a => FileLike (FileT a) where
   dropExtensions (FileT a) = FileT (dropExtensions a)
 
 instance FileLike FilePath where
-  fromFilePath = id
+  -- fromFilePath = id
   combine = F.combine
   takeBaseName = F.takeBaseName
   takeFileName = F.takeFileName
@@ -64,9 +70,4 @@ instance FileLike FilePath where
   takeExtension = F.takeExtension
   takeExtensions = F.takeExtensions
   dropExtensions = F.dropExtensions
-
-unpack :: (FileT FilePath) -> FilePath
-unpack (FileT f) = f
-
-toFilePath = unpack
 

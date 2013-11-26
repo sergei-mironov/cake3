@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                cake3
-version:             0.1.1.0
+version:             0.2.1.0
 synopsis:            Third cake - Makefile DSL
 description:         Thirdcake is a Makefile DSL written in Haskell. Write your build logic in
                      Haskell, obtain clean and safe Makefile, distribute it to the end-users.
@@ -16,12 +16,14 @@ category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
 data-dir:            src
-data-files:          CakeScript.sh
+data-files:          CakeScript.sh, UrEmbedHelp.txt
 
 library
-  exposed-modules:   Development.Cake3, Development.Cake3.Types,
-                     Development.Cake3.Writer, System.FilePath.Wrapper,
-                     Development.Cake3.Monad,
+  exposed-modules:   Development.Cake3
+                     Development.Cake3.Types
+                     Development.Cake3.Writer
+                     System.FilePath.Wrapper
+                     Development.Cake3.Monad
                      Development.Cake3.Rules.UrWeb
                      Development.Cake3.Rules.UrWeb2
                      Development.Cake3.Utils.Find
@@ -30,7 +32,8 @@ library
   build-depends:     base ==4.6.*, haskell-src-meta, template-haskell,
                      filepath, containers, text, monadloc, mtl,
                      bytestring, deepseq, system-filepath, text-format,
-                     directory, attoparsec
+                     directory, attoparsec, mime-types,
+                     language-javascript ==0.5.*, syb
 
   hs-source-dirs:    src
 
@@ -38,5 +41,15 @@ executable cake3
   hs-source-dirs:    src
   main-is:           CakeScript.hs
   build-depends:     base ==4.6.*, process
+  other-modules:     Paths_cake3
+
+executable urembed
+  hs-source-dirs:    src
+  main-is:           Development/Cake3/Ext/UrWeb/UrEmbed.hs
+  build-depends:     base == 4.6.*, mtl, language-javascript ==0.5.*, process,
+                     filepath, syb, optparse-applicative, directory,
+                     text, bytestring, containers, language-javascript,
+                     haskell-src-meta, template-haskell, attoparsec, monadloc,
+                     mime-types
   other-modules:     Paths_cake3
 

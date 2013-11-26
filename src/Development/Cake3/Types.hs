@@ -16,7 +16,6 @@ import Data.Set (Set)
 
 import System.FilePath.Wrapper
 
-
 -- | Makefile variable
 data Variable = Variable {
     vname :: String
@@ -30,10 +29,13 @@ type Vars = Map String (Set Variable)
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
 -- be escaped)
-type Command = [Either String File]
+type Command = [CommandPiece]
 
-return_text x = return [Left x]
-return_file x = return [Right x]
+data CommandPiece = CmdStr String | CmdFile File
+  deriving (Show, Eq, Ord, Data, Typeable)
+
+return_text x = return [CmdStr x]
+return_file f = return [CmdFile f]
 
 data Flag = Phony | Intermediate
   deriving(Show,Eq,Ord, Data, Typeable)
@@ -63,21 +65,28 @@ addPrerequisite f = addPrerequisites (S.singleton f)
 
 type Target = Set File
 
-groupSet :: (Ord k, Ord x) => (x -> Set k) -> Set x -> Map k (Set x)
+groupSet :: (Ord k, Ord x, Foldable t) => (x -> Set k) -> t x -> Map k (Set x)
 groupSet keys s = foldl' f' mempty s where
   f' m x = foldl' ins m (keys x) where
     ins m k = M.insertWith mappend k (S.singleton x) m
 
+groupRecipes ::  (Foldable t) => t Recipe -> Map File (Set Recipe)
 groupRecipes = groupSet rtgt
 
 flattern :: [Set x] -> [x]
 flattern = concat . map S.toList
 
-applyPlacement :: [File] -> Set Recipe  -> [Recipe]
-applyPlacement pl rs = 
-  let placed = nub $ flattern $ catMaybes $ L.map (\k -> M.lookup k (groupRecipes rs)) pl
-      all = S.toList rs
+applyPlacement' :: (Eq x) => [File] -> Map File x  -> [x]
+applyPlacement' pl m = 
+  let placed = nub $ catMaybes $ L.map (\k -> M.lookup k m) pl
+      all = L.map snd $ M.toList m
   in placed ++ (all \\ placed)
+
+applyPlacement :: (Foldable t) => [File] -> t Recipe  -> [Recipe]
+applyPlacement pl rs = flattern $ applyPlacement' pl (groupRecipes rs)
+
+-- applyPlacement2 :: (Foldable t) => [File] -> t File  -> [File]
+-- applyPlacement2 pl fs = flattern $ applyPlacement' pl (groupSet S.singleton fs)
     
 
 transformRecipes :: (Applicative m) => (Recipe -> m (Set Recipe)) -> Set Recipe -> m (Set Recipe)

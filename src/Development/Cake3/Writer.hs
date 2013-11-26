@@ -33,27 +33,32 @@ class ToMakeText x where
 instance ToMakeText [Char] where
   toMakeText = id
 
-instance ToMakeText [[Char]] where
-  toMakeText = concat . map toMakeText
-
-instance ToMakeText File where
-  toMakeText (FileT f) = escape f where
-    escape [] = []
-    escape (' ':xs) = "\\ " ++ escape xs
-    escape (x:xs) = (x:(escape xs))
+-- instance ToMakeText [[Char]] where
+--   toMakeText = concat . map toMakeText
 
 trimE = dropWhileEnd isSpace
 trimB = dropWhile isSpace
 
 cs a b = a ++ (' ':b)
 
-instance ToMakeText Command where
-  toMakeText [x] = either toMakeText toMakeText x
-  toMakeText ((Left str):(Right f):cmd) = toMakeText ((Left ((trimE str)`cs` (toMakeText f))):cmd)
-  toMakeText ((Right f):(Left str):cmd) = toMakeText ((Left ((toMakeText f)`cs`(trimB str))):cmd)
-  toMakeText ((Right a):(Right b):cmd) = toMakeText ((Left ((toMakeText a)`cs`(toMakeText b))):cmd)
-  toMakeText ((Left s1):(Left s2):cmd) = toMakeText ((Left (s1++s2)):cmd)
+escapeFile f = escapeFile' (toFilePath f)
+escapeFile' [] = []
+escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
+escapeFile' (x:xs) = (x:(escapeFile' xs))
 
+instance ToMakeText File where
+  toMakeText = escapeFile
+
+instance ToMakeText Command where
+  toMakeText cmd = concat $ map toMakeText cmd
+
+instance ToMakeText CommandPiece where
+  toMakeText (CmdStr s) = s
+  toMakeText (CmdFile f) = toMakeText f
+
+instance ToMakeText (Set File) where
+  toMakeText s = intercalate " " (map toMakeText (S.toList s))
+ 
 smap f = map f . S.toList
 
 line :: (MonadState String m) => String -> m ()
@@ -117,7 +122,9 @@ applySubprojects sp rs = runMakeLL "subproject" (transformRecipesM_ f rs) where
 --
 -- into the pair:
 --
---    a b c : stampX
+--    a : stampX
+--    b : stampX
+--    c : stampX
 --
 --    .INTERMEDIATE:stampX
 --    stampX : d e f
@@ -127,11 +134,12 @@ fixMultiTarget :: (Foldable t) => t Recipe -> Set Recipe
 fixMultiTarget rs = runMakeLL "fix-multy" (transformRecipesM_ f rs) where
   f r | (S.size (rtgt r)) > 1 = do
           s <- fresh
-          ruleLL $ do
-            produce (rtgt r)
-            location (rloc r)
-            depend s
-            flags (rflags r)
+          forM_ (S.toList $ rtgt r) $ \t -> do
+            ruleLL $ do
+              produce t
+              location (rloc r)
+              depend s
+              flags (rflags r)
           ruleLL $ do
             produce s
             depend (rsrc r)
@@ -224,15 +232,17 @@ buildMake ms = do
 
     serviceRegion = region "SERVICE" $ do
       line "GUARD = .GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)"
+      
       r <- runA_ "<internal>" $ do
         produce (queryTargets (recipes ms))
         commands (rcmd $ prebuilds ms)
-        commands [[Left "$(MAKE) MAIN=1 $(MAKECMDGOALS)"]]
+        commands [[CmdStr "$(MAKE) MAIN=1 $(MAKECMDGOALS)"]]
         commands (rcmd $ postbuilds ms)
         variables (rvars $ prebuilds ms)
         variables (rvars $ postbuilds ms)
         markPhony
-      writeRules $ fixMultiTarget [r]
+
+      writeRules $ applyPlacement (placement ms) $ fixMultiTarget [r]
 
 data MakeRegion = MR {
     mrname :: String

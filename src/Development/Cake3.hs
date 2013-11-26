@@ -20,7 +20,7 @@ module Development.Cake3 (
   , buildMake
   , runMake
   , runMake_
-  , include
+  , includeMakefile
   , MonadMake(..)
 
   -- Rules
@@ -43,6 +43,7 @@ module Development.Cake3 (
   , (.=)
   , (</>)
   , toFilePath
+  , readFileForMake
 
   -- Make parts
   , prerequisites
@@ -53,13 +54,15 @@ module Development.Cake3 (
   , makefile
   , CommandGen'(..)
   , make
+  , ProjectLocation(..)
+  , currentDirLocation
 
   -- More
   , module Control.Monad
   , module Control.Applicative
   ) where
 
-import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
+-- import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -77,6 +80,7 @@ import Data.Set (Set,member,insert)
 import Data.String as S
 import Data.Tuple
 import System.IO
+import System.Directory
 import qualified System.FilePath as F
 import Text.Printf
 
@@ -85,24 +89,33 @@ import Development.Cake3.Writer
 import Development.Cake3.Monad
 import System.FilePath.Wrapper as W
 
-file' :: String -> String -> String -> File
-file' root cwd f' =
-  let f = F.dropTrailingPathSeparator f' in
-  (fromFilePath ".") </> makeRelative (fromFilePath root)
-                                      ((fromFilePath cwd) </> (fromFilePath f))
+data ProjectLocation = ProjectLocation {
+    root :: FilePath
+  , off :: FilePath
+  } deriving (Show, Eq, Ord)
+
+currentDirLocation :: (MonadIO m) => m ProjectLocation
+currentDirLocation = do
+  cwd <- liftIO $ getCurrentDirectory
+  return $ ProjectLocation cwd cwd
+
+file' :: ProjectLocation -> String -> File
+file' pl f' = fromFilePath ((".") </> makeRelative (root pl) ((off pl) </> f)) where
+  f = F.dropTrailingPathSeparator f'
 
 selfUpdateRule :: Make Recipe
 selfUpdateRule = do
   rule $ do
     shell (CommandGen' (
       concat <$> sequence [
-        refInput $ (fromFilePath ".") </> (fromFilePath "Cakegen" :: File)
+        refInput $ (fromFilePath ".") </> "Cakegen"
       , refMerge $ string " > "
       , refOutput makefile]))
 
 runMake' :: Make a -> (Either String String -> IO b) -> IO b
 runMake' mk output = do
-  ms <- evalMake (mk >> selfUpdateRule)
+  -- ms <- evalMake (selfUpdateRule >> mk)
+  ms <- evalMake mk
   when (not $ L.null (warnings ms)) $ do
     hPutStr stderr (warnings ms)
   when (not $ L.null (errors ms)) $ do
@@ -121,9 +134,9 @@ runMake mk = runMake' mk output where
 
 withPlacement :: Make (Recipe,a) -> Make (Recipe,a)
 withPlacement mk = do
-  p <- getPlacementPos
   (r,a) <- mk
-  addPlacement p (S.findMin (rtgt r))
+  --p <- getPlacementPos
+  addPlacement 0 (S.findMin (rtgt r))
   return (r,a)
 
 rule' :: A a -> Make (Recipe,a)

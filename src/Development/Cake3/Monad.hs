@@ -1,4 +1,5 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -23,6 +24,7 @@ import qualified Data.String as STR
 import Data.List as L hiding (foldl')
 import Data.Either
 import Data.Foldable (foldl')
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Foldable as F
 import qualified Data.Traversable as F
 import qualified Data.Text as T
@@ -67,12 +69,12 @@ addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
-prebuild, postbuild :: CommandGen -> Make ()
-prebuild cmdg = do
+prebuild, postbuild :: (MonadMake m) => CommandGen -> m ()
+prebuild cmdg = liftMake $ do
   s <- get
   pb <- fst <$> runA' (prebuilds s) (shell cmdg)
   put s { prebuilds = pb }
-postbuild cmdg = do
+postbuild cmdg = liftMake $ do
   s <- get
   pb <- fst <$> runA' (postbuilds s) (shell cmdg)
   put s { postbuilds = pb }
@@ -129,8 +131,8 @@ addRecipe r = modify $ \ms ->
 getLoc :: Make String
 getLoc = sloc <$> get
 
-include :: File -> Make ()
-include f = modify $ \ms -> ms {includes = S.insert f (includes ms)}
+includeMakefile :: File -> Make ()
+includeMakefile f = modify $ \ms -> ms {includes = S.insert f (includes ms)}
 
 instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
@@ -170,7 +172,10 @@ markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) 
 readFile :: File -> A String
 readFile f = do
   A' (lift $ addMakeDep f)
-  liftIO (IO.readFile (unpack f))
+  liftIO (IO.readFile (toFilePath f))
+
+readFileForMake :: (MonadMake m) => File -> m BS.ByteString
+readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (toFilePath f)))
 
 -- | CommandGen is a recipe packed in the newtype to prevent partial expantion
 newtype CommandGen' m = CommandGen' { unCommand :: A' m Command }
@@ -199,7 +204,7 @@ instance ReferenceLike String where
   string s = Reference s
 
 instance ReferenceLike File where
-  string (FileT x) = string x
+  string f = Reference (toFilePath f)
 
 
 class (Monad m) => RefMerge m x where
@@ -210,7 +215,13 @@ instance (Monad m) => RefMerge m Variable where
     addVariable v
     return_text $ printf "$(%s)" n
 
-refMergeList xs = concat `liftM` mapM refMerge xs
+refMergeList xs = spacify $ mapM refMerge xs
+
+-- instance (Monad m) => RefMerge m [File] where
+--   refMerge xs = spacify $ map refMerge xs
+
+-- instance (Monad m) => RefMerge m [String] where
+--   refMerge xs = flap $ map refMerge xs
 
 instance RefMerge m x => RefMerge m (Set x) where
   refMerge xs = refMergeList (S.toList xs)
@@ -237,12 +248,26 @@ instance (Monad m) => RefOutput m File where
     modify $ \r -> r { rtgt = f `S.insert` (rtgt r)}
     return_file f
 
-instance RefOutput m x => RefOutput m [x] where
-  refOutput xs = concat `liftM` mapM refOutput xs
+-- instance RefOutput m x => RefOutput m [x] where
+--   refOutput xs = concat `liftM` mapM refOutput xs
 
-instance RefOutput m x => RefOutput m (Set x) where
+inbetween x mx = (concat`liftM`mx) >>= \l -> return (inbetween' x l) where
+  inbetween' x [] = []
+  inbetween' x [a] = [a]
+  inbetween' x (a:as) = a:x:(inbetween' x as)
+
+spacify l = (CmdStr " ") `inbetween` l
+
+instance (Monad m) => RefOutput m [File] where
+  refOutput xs = spacify $ mapM refOutput (xs)
+
+instance (Monad m) => RefOutput m (Set File) where
   refOutput xs = refOutput (S.toList xs)
 
+instance (RefOutput m x) => RefOutput m (Maybe x) where
+  refOutput mx = case mx of
+    Nothing -> return mempty
+    Just x -> refOutput x
 
 -- | Data structure x may be referenced from within the command. Referal
 -- class specifies side effects of such referencing. For example, referencig the
@@ -258,10 +283,13 @@ instance (Monad m) => RefInput m File where
 instance (Monad m) => RefInput m Recipe where
   refInput r = refInput (rtgt r)
 
-instance RefInput m x => RefInput m [x] where
-  refInput xs = concat `liftM` mapM refInput xs
+-- instance RefInput m x => RefInput m [x] where
+--   refInput xs = concat `liftM` mapM refInput xs
 
-instance RefInput m x => RefInput m (Set x) where
+instance (Monad m) => RefInput m [File] where
+  refInput xs = spacify $ mapM refInput xs
+
+instance Monad m => RefInput m (Set File) where
   refInput xs = refInput (S.toList xs)
 
 instance (MonadIO m, RefInput m x) => RefInput m (IO x) where
@@ -269,6 +297,11 @@ instance (MonadIO m, RefInput m x) => RefInput m (IO x) where
 
 instance (MonadMake m) => RefInput m (Make Recipe) where
   refInput mr = liftMake mr >>= refInput
+
+instance (RefInput m x) => RefInput m (Maybe x) where
+  refInput mx = case mx of
+    Nothing -> return mempty
+    Just x -> refInput x
 
 depend :: (RefInput m x) => x -> A' m ()
 depend x = refInput x >> return ()
@@ -315,7 +348,7 @@ cmd = QuasiQuoter
     qqact s = 
       let chunks = flip map (getChunks (STR.fromString s)) $ \c ->
                      case c of
-                       T t -> [| return_text t |]
+                       T t -> let t' = T.unpack t in [| return_text t' |]
                        E c t -> case parseExp (T.unpack t) of
                                   Left  e -> error e
                                   Right e -> case c of
