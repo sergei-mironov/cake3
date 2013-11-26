@@ -36,6 +36,7 @@ import qualified System.FilePath as F
 import System.IO as IO
 
 import System.FilePath.Wrapper
+import Development.Cake3.Monad
 import Development.Cake3
 
 data UrpAllow = UrpMime | UrpUrl
@@ -76,10 +77,10 @@ newtype UWLib = UWLib Urp
 newtype UWExe = UWExe Urp
   deriving (Show,Data,Typeable)
 
-instance (Monad m) => RefInput m UWLib where
+instance (MonadAction a m) => RefInput a m UWLib where
   refInput (UWLib u) = refInput (urp u)
  
-instance (Monad m) => RefInput m UWExe where
+instance (MonadAction a m) => RefInput a m UWExe where
   refInput (UWExe u) = refInput (urpExe u)
  
 
@@ -151,35 +152,43 @@ instance ToUrpLine UrpModToken where
   toUrpLine up (UrpModule2 f _) = up </> toFilePath (dropExtensions f)
   toUrpLine up (UrpModuleSys s) = printf "$/%s" s
 
-newtype UrpGen a = UrpGen { unUrpGen :: StateT UrpState Make a }
+newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
+
+instance (Monad m) => MonadAction (UrpGen (A' m)) m where
+  liftAction a = UrpGen (lift a)
 
 toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-uwlib :: File -> UrpGen () -> Make UWLib
+uwlib :: File -> UrpGen (A' Make) () -> Make UWLib
 uwlib urpfile m = do
-  ((),s) <- runStateT (unUrpGen m) (defState urpfile)
-  let u@(Urp _ _ hdr mod) = urpst s
-  let up = urpUp urpfile
-  toFile urpfile $ do
-    forM hdr (line . toUrpLine up)
-    line ""
-    forM mod (line . toUrpLine up)
-  forM_ (urpObjs u) $ \o -> do
-    let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
-    let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
-    rule $ do
-      shell [cmd| $cc -c -I $incl -o %o @(o .= "c") |]
-  rule $ do
+  (_,u) <- rule' $ do
+    ((),s) <- runStateT (unUrpGen m) (defState urpfile)
+    let u@(Urp _ _ hdr mod) = urpst s
+    let up = urpUp urpfile
+
+    toFile urpfile $ do
+      forM hdr (line . toUrpLine up)
+      line ""
+      forM mod (line . toUrpLine up)
+
+    forM_ (urpObjs u) $ \o -> do
+      let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
+      let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
+      rule $ do
+        shell [cmd| $cc -c -I $incl -o %o @(o .= "c") |]
+
     depend (urpDeps u)
     depend (urpLibs u)
     shell [cmd|touch %urpfile|]
+    return u
+
   return $ UWLib u
 
-uwapp :: String -> File -> UrpGen () -> Make UWExe
+uwapp :: String -> File -> UrpGen (A' Make) () -> Make UWExe
 uwapp opts urpfile m = do
   (UWLib u') <- uwlib urpfile m
   let u = u' { uexe = Just (urpfile .= "exe") }
@@ -197,13 +206,13 @@ liftUrp m = m
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
 addMod m = modify $ \s -> let u = urpst s in s { urpst = u { umod = (umod u) ++ [m] } }
 
-database :: String -> UrpGen ()
+database :: (MonadMake m) => String -> UrpGen m ()
 database dbs = addHdr $ UrpDatabase dbs
   
-allow :: UrpAllow -> String -> UrpGen ()
+allow :: (MonadMake m) => UrpAllow -> String -> UrpGen m ()
 allow a s = addHdr $ UrpAllow a s
 
-rewrite :: UrpRewrite -> String -> UrpGen ()
+rewrite :: (MonadMake m) => UrpRewrite -> String -> UrpGen m ()
 rewrite a s = addHdr $ UrpRewrite a s
 
 urpUp :: File -> FilePath
@@ -218,13 +227,13 @@ data UrpLibReference
   | UrpLibEmbed UrEmbed
   deriving(Show)
 
-library' :: File -> UrpGen ()
+library' :: (MonadMake m) => File -> UrpGen m ()
 library' l = do
   when ((takeExtension l) /= ".urp") $ do
     fail "library declaration for %s should ends with '.urp'" (toFilePath l)
   addHdr $ UrpLibrary l
 
-library :: UrpLibReference -> UrpGen ()
+library :: (MonadMake m) => UrpLibReference -> UrpGen m ()
 library (UrpLibStandalone l) = do
   library' l
   when ((toFilePath $ takeDirectory l) /= ".") $ do
@@ -236,26 +245,26 @@ standalone f = UrpLibStandalone f
 internal u = UrpLibInternal u
 embed e = UrpLibEmbed e
 
-module_ :: UrpModToken -> UrpGen ()
+module_ :: (MonadMake m) => UrpModToken -> UrpGen m ()
 module_ = addMod
 
 pair f = UrpModule2 (f.="ur") (f.="urs")
 single f = UrpModule1 f
 sys s = UrpModuleSys s
 
-debug :: UrpGen ()
+debug :: (MonadMake m) => UrpGen m ()
 debug = addHdr $ UrpDebug
 
-include :: File -> UrpGen ()
+include :: (MonadMake m) => File -> UrpGen m ()
 include f = addHdr $ UrpInclude f
 
-link :: File -> UrpGen ()
+link :: (MonadMake m) => File -> UrpGen m ()
 link f = addHdr $ UrpLink f
 
-ffi :: File -> UrpGen ()
+ffi :: (MonadMake m) => File -> UrpGen m ()
 ffi s = addHdr $ UrpFFI s
 
-sql :: File -> UrpGen ()
+sql :: (MonadMake m) => File -> UrpGen m ()
 sql f = addHdr $ UrpSql f
   
 jsFunc n s = addHdr $ UrpJSFunc n s
@@ -354,12 +363,12 @@ parse_js contents = do
     hio :: (MonadIO m) => Handle -> String -> m ()
     hio h = liftIO . hPutStrLn h
 
-bin :: File -> File -> UrpGen ()
+bin :: (MonadMake m) => File -> File -> UrpGen m ()
 bin dir src = do
   c <- readFileForMake src
   bin' dir (toFilePath src) c
 
-bin' :: File -> FilePath -> BS.ByteString -> UrpGen ()
+bin' :: (MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
 bin' dir src_name src_contents = do
 
   let mime = guessMime src_name

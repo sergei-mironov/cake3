@@ -132,15 +132,16 @@ runMake mk = runMake' mk output where
   output (Left err) = fail err
   output (Right str) = return str
 
-withPlacement :: Make (Recipe,a) -> Make (Recipe,a)
+withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
 withPlacement mk = do
   (r,a) <- mk
-  --p <- getPlacementPos
-  addPlacement 0 (S.findMin (rtgt r))
-  return (r,a)
+  liftMake $ do
+    --p <- getPlacementPos
+    addPlacement 0 (S.findMin (rtgt r))
+    return (r,a)
 
-rule' :: A a -> Make (Recipe,a)
-rule' act = do
+rule' :: (MonadMake m) => A a -> m (Recipe,a)
+rule' act = liftMake $ do
   loc <- getLoc
   (r,a) <- runA loc act
   addRecipe r
@@ -151,8 +152,8 @@ phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
-rule :: A a -> Make Recipe
-rule act = fst <$> withPlacement (rule' act)
+rule :: (MonadMake m) => A a -> m Recipe
+rule act = liftMake $ fst <$> withPlacement (rule' act)
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()

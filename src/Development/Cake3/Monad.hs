@@ -1,4 +1,5 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -11,6 +12,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.Trans
 import Control.Monad.Loc
 import Data.Data
 import Data.Typeable
@@ -96,7 +98,7 @@ checkForTargetConflicts ms = foldl' checker mempty (groupRecipes (recipes ms)) w
     e = printf "Error: Recipes share one or more targets\n\t%s\n" (show rs)
 
 
-class (Monad m) => MonadMake m where
+class (MonadIO m) => MonadMake m where
   liftMake :: Make a -> m a
 
 newtype Make a = Make { unMake :: (StateT MakeState IO) a }
@@ -142,6 +144,12 @@ newtype A' m a = A' { unA' :: StateT Recipe m a }
   deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO,MonadFix)
 
 type A a = A' Make a
+
+class (Monad m, Monad t) => MonadAction t m | t -> m where
+  liftAction :: A' m x -> t x
+
+instance (Monad m) => MonadAction (A' m) m where
+  liftAction = id
 
 runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
 runA' r act = do
@@ -272,38 +280,38 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
 -- | Data structure x may be referenced from within the command. Referal
 -- class specifies side effects of such referencing. For example, referencig the
 -- file leads to adding it to the prerequisites list.
-class (Monad m) => RefInput m x where
-  refInput :: x -> A' m Command
+class (MonadAction a m) => RefInput a m x where
+  refInput :: x -> a Command
 
-instance (Monad m) => RefInput m File where
-  refInput f = do
+instance (MonadAction a m) => RefInput a m File where
+  refInput f = liftAction $ do
     modify $ \r -> r { rsrc = f `S.insert` (rsrc r)}
     return_file f
 
-instance (Monad m) => RefInput m Recipe where
+instance (MonadAction a m) => RefInput a m Recipe where
   refInput r = refInput (rtgt r)
 
 -- instance RefInput m x => RefInput m [x] where
 --   refInput xs = concat `liftM` mapM refInput xs
 
-instance (Monad m) => RefInput m [File] where
+instance (MonadAction a m) => RefInput a m [File] where
   refInput xs = spacify $ mapM refInput xs
 
-instance Monad m => RefInput m (Set File) where
+instance (MonadAction a m) => RefInput a m (Set File) where
   refInput xs = refInput (S.toList xs)
 
-instance (MonadIO m, RefInput m x) => RefInput m (IO x) where
+instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
   refInput mx = liftIO mx >>= refInput
 
-instance (MonadMake m) => RefInput m (Make Recipe) where
+instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
   refInput mr = liftMake mr >>= refInput
 
-instance (RefInput m x) => RefInput m (Maybe x) where
+instance (RefInput a m x) => RefInput a m (Maybe x) where
   refInput mx = case mx of
     Nothing -> return mempty
     Just x -> refInput x
 
-depend :: (RefInput m x) => x -> A' m ()
+depend :: (RefInput a m x) => x -> a ()
 depend x = refInput x >> return ()
 
 produce :: (RefOutput m x) => x -> A' m ()
