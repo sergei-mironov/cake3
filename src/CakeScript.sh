@@ -12,15 +12,20 @@ cat <<EOF
 
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-module ${1}_P(file,cakefiles,projectroot,moduleroot) where
+module ${1}_P(file,cakefiles,filterDirectoryContentsRecursive) where
 
+import Control.Monad.Trans
 import Development.Cake3
+import Development.Cake3.Utils.Find
 import GHC.Exts (IsString(..))
 
 pl = ProjectLocation projectroot moduleroot
 
 file :: String -> File
 file x = file' pl x
+
+instance IsString File where
+  fromString = file
 
 projectroot :: FilePath
 projectroot = "$TOP"
@@ -35,39 +40,59 @@ cakefiles =
     "$TOP" -> map (file' rl) ($3)
     _ -> error "cakefiles are defined for top-level cake only"
 
-
-instance IsString File where
-  fromString = file
+filterDirectoryContentsRecursive :: (MonadIO m) => [String] -> m [File]
+filterDirectoryContentsRecursive exts = liftM (filterExts exts) (getDirectoryContentsRecursive (file "."))
 
 EOF
 }
 
 caketemplate() {
 cat <<"EOF"
-{-# LANGUAGE RecursiveDo, QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Cakefile where
 
 import Development.Cake3
-import Cakefile_P (file, cakefiles)
+import Cakefile_P (file,projectroot)
 
-elf = rule (file "main.elf") $ do
-    shell [cmd| echo "Your commands go here" ; exit 1 ; |]
 
-main = runMake (place (phony "all" (depend elf)) >> place defaultSelfUpdate)
+main = writeMake "Makefile" $ do
+
+  cs <- filterDirectoryContentsRecursive [".c"]
+
+  d <- rule $ do
+    shell [cmd|gcc -M @cfiles -MF %(file "depend.mk")|]
+
+  os <- forM cs $ \c -> do
+    rule $ do
+      shell [cmd| gcc -c $(extvar "CFLAGS") -o %(c.="o") @c |]
+
+  elf <- rule $ do
+    shell [cmd| gcc -o %(file "main.elf") @os |]
+
+  rule $ do
+    phony "all"
+    depend elf
+
+  includeMakefile d
 
 EOF
 }
 
+ARGS_PASS=""
+GHCI=n
+
 while test -n "$1" ; do
   case "$1" in
     --help|-h|help) 
-      err "Cake3 the Makefile generator help"
+      err "Cake3 the Makefile generator"
       err "$CAKEURL"
-      err "Usage: cake3 [--help|-h] [init]"
+      err "Usage: cake3 [--help|-h] [init] args"
       err "cake3 init"
-      err "    - Create default Cakefile.hs"
-      err "cake3"
-      err "    - Build the Makefile"
+      err "    - Create the default Cakefile.hs"
+      err "cake3 <args>"
+      err "    - Compile the ./Cakegen and run it. Args are passed as is."
+      err ""
+      err "Other arguments are passed to the ./Cakgegen as is"
       exit 1;
       ;;
     init)
@@ -76,6 +101,12 @@ while test -n "$1" ; do
       caketemplate > Cakefile.hs
       echo "Cakefile.hs has been created"
       exit 0;
+      ;;
+    ghci)
+      GHCI=y
+      ;;
+    *)
+      ARGS_PASS="$ARGS_PASS $1"
       ;;
   esac
   shift
@@ -148,9 +179,12 @@ fi
 (
 set -e
 cd $T
-ghc --make "$MAIN_" -main-is "$MAIN" -o Cakegen
+case $GHCI in
+  n) ghc --make "$MAIN_" -main-is "$MAIN" -o Cakegen ;;
+  y) exec ghci -main-is "$MAIN" ;;
+esac
+
 cp -t "$CWD" Cakegen
 ) &&
-
-./Cakegen > Makefile  && echo "Makefile created" >&2
+./Cakegen $ARGS_PASS
 

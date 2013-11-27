@@ -19,7 +19,7 @@ module Development.Cake3 (
   , Make
   , buildMake
   , runMake
-  , runMake_
+  , writeMake
   , includeMakefile
   , MonadMake(..)
 
@@ -100,8 +100,11 @@ currentDirLocation = do
   return $ ProjectLocation cwd cwd
 
 file' :: ProjectLocation -> String -> File
-file' pl f' = fromFilePath ((".") </> makeRelative (root pl) ((off pl) </> f)) where
+file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
+  rel = makeRelative (root pl) ((off pl) </> f)
   f = F.dropTrailingPathSeparator f'
+  addpoint "." = "."
+  addpoint p = "."</>p
 
 selfUpdateRule :: Make Recipe
 selfUpdateRule = do
@@ -111,26 +114,25 @@ selfUpdateRule = do
         refInput $ (fromFilePath ".") </> "Cakegen"
       , refMerge $ string " > "
       , refOutput makefile]))
+    get
 
-runMake' :: Make a -> (Either String String -> IO b) -> IO b
+runMake' :: Make a -> (String -> IO b) -> IO b
 runMake' mk output = do
-  -- ms <- evalMake (selfUpdateRule >> mk)
   ms <- evalMake mk
   when (not $ L.null (warnings ms)) $ do
     hPutStr stderr (warnings ms)
   when (not $ L.null (errors ms)) $ do
     fail (errors ms)
-  output (buildMake ms)
+  case buildMake ms of
+    Left e -> fail e
+    Right s -> output s
 
-runMake_ :: Make a -> IO ()
-runMake_ mk = runMake' mk output where
-  output (Left err) = hPutStrLn stderr err
-  output (Right str) = hPutStrLn stdout str
+writeMake :: FilePath -> Make a -> IO ()
+writeMake "-" mk = runMake' mk (hPutStrLn stdout)
+writeMake f mk = runMake' mk (writeFile f)
 
 runMake :: Make a -> IO String
-runMake mk = runMake' mk output where
-  output (Left err) = fail err
-  output (Right str) = return str
+runMake mk = runMake' mk return
 
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
 withPlacement mk = do
@@ -152,8 +154,8 @@ phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
-rule :: (MonadMake m) => A a -> m Recipe
-rule act = liftMake $ fst <$> withPlacement (rule' act)
+rule :: (MonadMake m) => A a -> m a
+rule act = liftMake $ snd <$> withPlacement (rule' act)
 
 -- FIXME: depend can be used under unsafe but it doesn't work
 unsafe :: A () -> A ()

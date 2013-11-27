@@ -18,8 +18,6 @@ import Data.String
 -- import qualified Data.Text as T
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import Development.Cake3
-import Development.Cake3.Rules.UrWeb2
 import Language.JavaScript.Parser
 import Options.Applicative
 import System.Environment
@@ -30,6 +28,9 @@ import System.IO
 import System.Directory
 import System.Info
 import Text.Printf
+
+import Development.Cake3
+import Development.Cake3.Ext.UrWeb
 
 
 import Paths_cake3

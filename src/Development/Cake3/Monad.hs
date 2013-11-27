@@ -25,7 +25,7 @@ import Data.Set(Set)
 import qualified Data.String as STR
 import Data.List as L hiding (foldl')
 import Data.Either
-import Data.Foldable (foldl')
+import Data.Foldable (Foldable(..), foldl')
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Foldable as F
 import qualified Data.Traversable as F
@@ -133,8 +133,11 @@ addRecipe r = modify $ \ms ->
 getLoc :: Make String
 getLoc = sloc <$> get
 
-includeMakefile :: File -> Make ()
-includeMakefile f = modify $ \ms -> ms {includes = S.insert f (includes ms)}
+includeMakefile :: (Foldable t) => t File -> Make ()
+includeMakefile fs = foldl' scan (return ()) fs where
+  scan a f = do
+    modify $ \ms -> ms {includes = S.insert f (includes ms)}
+    return ()
 
 instance MonadLoc Make where
   withLoc l' (Make um) = Make $ do
@@ -195,12 +198,14 @@ commandGen mcmd = CommandGen' mcmd
 addCommands :: (Monad m) => [Command] -> A' m ()
 addCommands lines = modify (\r -> r { rcmd = (rcmd r) ++ lines })
 
-shell' :: (Monad m) => CommandGen' m -> A' m ()
+shell' :: (Monad m) => CommandGen' m -> A' m [File]
 shell' cmdg = do
   line <- unCommand cmdg
   addCommands [line]
+  r <- get
+  return (S.toList (rtgt r))
 
-shell :: CommandGen -> A ()
+shell :: CommandGen -> A [File]
 shell = shell'
 
 newtype Reference = Reference String
@@ -294,7 +299,7 @@ instance (MonadAction a m) => RefInput a m Recipe where
 -- instance RefInput m x => RefInput m [x] where
 --   refInput xs = concat `liftM` mapM refInput xs
 
-instance (MonadAction a m) => RefInput a m [File] where
+instance (RefInput a m x) => RefInput a m [x] where
   refInput xs = spacify $ mapM refInput xs
 
 instance (MonadAction a m) => RefInput a m (Set File) where
@@ -360,8 +365,8 @@ cmd = QuasiQuoter
                        E c t -> case parseExp (T.unpack t) of
                                   Left  e -> error e
                                   Right e -> case c of
-                                    '@' -> appE [| refInput |] (return e)
-                                    '%' -> appE [| refOutput |] (return e)
-                                    _   -> appE [| refMerge |] (return e)
+                                    '$' -> appE [| refInput |] (return e)
+                                    '@' -> appE [| refOutput |] (return e)
+                                    -- _   -> appE [| refMerge |] (return e)
       in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
 

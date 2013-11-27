@@ -89,7 +89,7 @@ getChunks i = case parseOnly parser (T.strip i) of
 
     parser :: Parser [Chunk]
     parser = fmap concat $ flip manyTill endOfInput $ do
-        text <- takeTill (\c -> elem c "@$%")
+        text <- takeTill (\c -> elem c "@$")
         end  <- atEnd
         if end
             then return [T text]

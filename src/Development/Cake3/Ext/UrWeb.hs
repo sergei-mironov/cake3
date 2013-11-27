@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-module Development.Cake3.Rules.UrWeb2 where
+module Development.Cake3.Ext.UrWeb where
 
 import Data.Data
 import Data.Char

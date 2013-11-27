@@ -22,7 +22,7 @@ filterExts exts files = filter (\f -> or $ map (isExt f) exts) files where
 -- FIXME: Figure out how to add ./relative notation (./file instead of file)
 -- Makefile : contents_of(directory)
 getDirectoryContentsRecursive :: (MonadIO m) => File -> m [File]
-getDirectoryContentsRecursive (FileT topdir) = map (fromFilePath . (topdir</>)) `liftM` (liftIO $ recurseDirectories [""])
+getDirectoryContentsRecursive td@(FileT topdir) = map (td</>) `liftM` (liftIO $ recurseDirectories [""])
   where
     recurseDirectories :: [FilePath] -> IO [FilePath]
     recurseDirectories []         = return []
@@ -45,3 +45,4 @@ getDirectoryContentsRecursive (FileT topdir) = map (fromFilePath . (topdir</>)) 
         ignore ['.']      = True
         ignore ['.', '.'] = True
         ignore _          = False
+ 

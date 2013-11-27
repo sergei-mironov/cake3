@@ -4,37 +4,7 @@ Cake3
 Cake3 is a EDSL for building Makefiles, written in Haskell. With cake3,
 developer can write their build logic in Haskell, obtain clean and safe Makefile
 and distribute it among the non-Haskell-aware users. Currenly, GNU Make is
-required.
-
-Installation
-------------
-
-  1. Install [Haskell Platform](http://www.haskell.org/platform/)
-
-  2. Install dependencies
-    
-         $ cabal install haskell-src-meta monadloc QuasiText
-
-  3. Build the thirdcake from Github
-
-         $ git clone http://github.com/grwlf/cake3
-         $ cd cake3
-         $ cabal configure && cabal install
-
-Usage
------
-
-  1. Create the Cakefile.hs in the root dir of your project
-
-        $ cake3 init
-        Cakefile.hs has been created
-
-  2. Edit Cakefile.hs, fill it with rules you need (refer to Example/Foo)
-  3. Build Makefile with
-
-        $ cake3
-
-  4. Run GNU make as usual
+the only backend supported.
 
 The Goals
 ---------
@@ -54,6 +24,94 @@ The goals of Cake3 are to help the developer to:
   * Still have a correct Makefile which could be distributed among the users
   * Take a bit of Haskell practice :)
 
+Installation
+------------
+
+From Hackage:
+  
+    $ cabal install cake3
+
+
+From the Github:
+
+  1. Install [Haskell Platform](http://www.haskell.org/platform/)
+
+  2. Install dependencies
+    
+         $ cabal install haskell-src-meta monadloc QuasiText
+
+  3. Build the thirdcake from Github
+
+         $ git clone http://github.com/grwlf/cake3
+         $ cd cake3
+         $ cabal configure && cabal install
+
+Usage
+-----
+
+  1. Create the Cakefile.hs in the root dir of your project
+
+        $ cake3 init
+
+  2. Edit Cakefile.hs, fill it with rules or other logic you need 
+
+        $ vim Cakefile.hs
+
+  3. Debug your generator with
+
+        $ cake3 ghci
+        Prelude> :lo Cakefile.hs 
+
+  3. Build the Makefile with cake3
+
+        $ cake3
+
+  4. Run GNU make as usual
+
+How does it work
+----------------
+
+Cake3 allows user to write Cakefile.hs in plain Haskell to define rules, targets
+and other stuff as usual. After that, `cake3` compiles it into ./Cakegen
+application which builds your Makefile (ghc is required for that). GNU Make
+knows how to do the rest.
+
+### Example
+
+Here is the example of simple Cakefile.hs:
+
+    {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
+    module Cakefile where
+
+    import Development.Cake3
+    import Development.Cake3.Utils.Find
+    import Cakefile_P
+
+    main = writeMake "Makefile" $ do
+
+      cs <- filterDirectoryContentsRecursive [".c"]
+
+      d <- rule $ do
+        shell [cmd|gcc -M @cs -MF %(file "depend.mk")|]
+
+      os <- forM cs $ \c -> do
+        rule $ do
+          shell [cmd| gcc -c $(extvar "CFLAGS") -o %(c.="o") @c |]
+
+      elf <- rule $ do
+        shell [cmd| gcc -o %(file "main.elf") @os |]
+
+      b <- rule $ do
+        phony "all"
+        depend elf
+
+      includeMakefile d
+
+### Explanation
+
+  * Quasy-quotation `[cmd||]`
+
+
 Features and limitations
 ------------------------
 
@@ -67,6 +125,11 @@ reward, thirdcake protect the develper from a number of common make-specific
 mistakes.
 
 ### Features
+
+  * *Spaces inside the filenames*
+  
+    Everyone knows that Makefiles don't like spaces. Actually, the '\ '
+    syntax is the only way to deal with them.
 
   * *Rebuild a rule when variable changes.*
   
@@ -114,45 +177,34 @@ mistakes.
 
 ### Limitations
 
-  * Thirdcake doesn't support make-level includes. This is a serious limitation,
-    so I'm going to add that support ASAP.
-  * No support for referencing a makefile-variable from within other variable.
-    Again, lack of time. On the TODO list.
   * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
     and others) are needed to make variable-guard tricks to work.
   * Coreutils package is required because resulting Makefile calls md5sum and
     cut programs.
-  * Cakefiles should have unique names (see below for more details)
-  * Posix environment is required. So, Linux, Probably Mac, Probably Windows+Cygwin.
+  * All Cakefiles across the project tree should have unique names in order to
+    be copied. Duplicates are found, the first one is used
+  * Posix environment is required. So, Linux, Probably Mac, Probably
+    Windows+Cygwin.
+  * Wildcards are not supported in the output Makefile language subset. I plan
+    to experiment with supporting them, but think that space problem will
+    probably arise.
+  * Variables-as-targets are also not supported.
 
-How does it work
-----------------
-
-Cake3 allows user to write Cakefile.hs in plain Haskell to define rules, targets
-and other stuff as usual. After that, `cake3` compiles it into Makefile (ghc is
-required for that). At this point, make will do the rest.
-
-Again, in more details:
+Random implementation details
+-----------------------------
 
   1. User writes a cakefile (./Cake\*.hs) describing the rules. Refer to
-     Example/Foo/Cakefile.lhs. Note, that different cakefiles should have
+     Example/GHC/Cakefile.hs. Note, that different cakefiles should have
      different names even if they are in different directories due to GHC import
      restrictions. This way user can import one cakefile from another, as if
      they were in the same directory. Actually, cake3 copies all cakefiles into
      one temporary directory and compiles them there.
 
-  2. User executes `cake3` which compiles ./Cakefile.hs into `./Cakegen` and
-     produces Makefile. Note that cake3 expects ./Cakegen to print the the
-     Makefile to it's standard output. Also, cake3 creates ./Cakefile_P.hs
-     containing information about paths. Most important are _files_ function
-     which translates relative _filename_ into _"." </> path_to_root </>
-     filename_. Also note, that cake3 is a small program which launches a
-     shell-script. That is a trick to workaround cabal restriction which forbids
-     the shipment of non-binary executables. 
+  2. Cake3 copies all Cake\*.hs files from your project tree into temporary dir
+     and compiles them with GHC (or calls GHCi). Before that, it creates a
+     ./Cake\*_P.hs pathfile containing information about paths. The most
+     important is _files_ function which translates relative _filename_ into
+     _"." </> path_to_subproject </> filename_.
 
-  3. `make` can now be used to build the project. Note, that make knows how to
-     update itself, so user doesn't have to run cake3 every time he or she
-     changes ./Cakefile.hs.
-
-
+  3. Cake3 uses relative paths only for the final Makefile
 

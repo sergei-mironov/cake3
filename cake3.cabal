@@ -24,8 +24,7 @@ library
                      Development.Cake3.Writer
                      System.FilePath.Wrapper
                      Development.Cake3.Monad
-                     Development.Cake3.Rules.UrWeb
-                     Development.Cake3.Rules.UrWeb2
+                     Development.Cake3.Ext.UrWeb
                      Development.Cake3.Utils.Find
                      Text.QuasiMake
 

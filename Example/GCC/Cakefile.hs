@@ -1,32 +1,26 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Cakefile where
 
 import Development.Cake3
 import Development.Cake3.Utils.Find
-import Cakefile_P (file,projectroot)
+import Cakefile_P
 
+main = writeMake "Makefile" $ do
 
-main = runMake_ $ do
+  cs <- filterDirectoryContentsRecursive [".c"]
 
-  cfiles <- filterExts [".c"] <$> getDirectoryContentsRecursive projectroot
+  d <- rule $ do
+    shell [cmd|gcc -M ^cs -MF @(file "depend.mk")|]
 
-  let obj c = c .= ".o"
-  let elf = file "main.elf"
-  let deps = file "depend.mk"
+  os <- forM cs $ \c -> do
+    rule $ do
+      shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") @c |]
 
-  rule $ do
+  elf <- rule $ do
+    shell [cmd| gcc -o @(file "main.elf") ^os |]
+
+  b <- rule $ do
     phony "all"
     depend elf
 
-  rule $ do
-    shell [cmd|gcc -M @cfiles -MF %deps|]
-
-  forM cfiles $ \c -> do
-    rule $ do
-      shell [cmd| gcc -c $(extvar "CFLAGS") -o %(obj c) @c |]
-
-  rule $ do
-    shell [cmd| gcc -o %elf @(map obj cfiles) |]
-
-  include deps
-
+  includeMakefile d
