@@ -145,8 +145,8 @@ mistakes.
 
   * *Spaces inside the filenames*
   
-    Everyone knows that Makefiles don't like spaces. Actually, the '\ '
-    syntax is the only way to deal with them.
+    Everyone knows that Makefiles don't like spaces in filenames. Cake3
+    carefully inserts '\ ' to make make happy.
 
   * *Rebuild a rule when variable changes.*
   
@@ -181,12 +181,12 @@ mistakes.
     article](http://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html#Multiple-Outputs)
     if you are surprised. Thirdcake implements [.INTERMEDIATE
     pattern](http://stackoverflow.com/a/10609434/1133157) to deal with this
-    problem so `rule` function has exactly meaning:
+    problem so `rule` like this
 
         rule $ do
           shell [cmd|foo $in1 $in2 -o @out1 -o @out2 |]
 
-    does exactly what you expect.
+    will always notice inputs changes and rebuild both outputs
 
   * *Makefiles hierarchy.*
   
