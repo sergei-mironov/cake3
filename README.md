@@ -195,7 +195,7 @@ mistakes.
 ### Limitations
 
   * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
-    and others) are needed to make variable-guard tricks to work.
+    and others) are needed to make various tricks to work.
   * Coreutils package is required because resulting Makefile calls md5sum and
     cut programs.
   * All Cakefiles across the project tree should have unique names in order to
