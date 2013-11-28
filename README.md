@@ -119,14 +119,14 @@ Here is the example of simple Cakefile.hs:
   * All actions live in Action monad (`A` Monad). `shell` and `unsafeShell` is
     the most important of them. 
   * Quasy-quotation is used to simplify the shell code. `[cmd||]` takes a string
-    as an argument. It's syntax is the following:
-    *  $name untiquotes hasell expressions of type File, Variable plus few
+    as an argument. It's syntax includes:
+    *  $name untiquotes hasell expressions `name` of type File, Variable plus few
        others. They define a prerequisites of a rule
-    *  @name untiquotes hasell expressions of type File. They define rule's
-       targets
-    *  complex expressions are also supported with $() and @().
-  * Rules appears in the Makefile in the reversed order. Normally, you want 'all'
-    rule to be at the bottom.
+    *  @name untiquotes hasell expressions `name` of type File. They define
+       rule's targets
+    *  complex expressions are also supported with $(foo bar) and @(bar baz).
+  * Rules appears in the Makefile in the reversed order. Normally, you want
+    'all' rule to be at the bottom.
 
 
 Features and limitations
