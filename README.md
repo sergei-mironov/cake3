@@ -164,19 +164,29 @@ mistakes.
     Thirdcake implements the makevar checksum
     [pattern](http://stackoverflow.com/a/17830736/1133157) from StackOverflow to
     detect changes in variables and rebuild targets when nessesary.
+
+        rule $ do
+          shell [cmd|foo $(extvar "FLAGS") -o @out $in |]
+
+    will rebuild `out` on FLAGS change
  
   * *A rule with multiple targets.*
     
     It is not that simple to write a rule which has more than one target. Really,
         
         out1 out2 : in1 in2
-            foo in1 in2 -o1 out1 -o2 out2
+            foo in1 in2 -o out1 -o out2
 
     is not corret. Read this [Automake
     article](http://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html#Multiple-Outputs)
     if you are surprised. Thirdcake implements [.INTERMEDIATE
     pattern](http://stackoverflow.com/a/10609434/1133157) to deal with this
-    problem
+    problem so `rule` function has exactly meaning:
+
+        rule $ do
+          shell [cmd|foo $in1 $in2 -o @out1 -o @out2 |]
+
+    does exactly what you expect.
 
   * *Makefiles hierarchy.*
   
