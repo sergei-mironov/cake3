@@ -120,11 +120,11 @@ Here is the example of simple Cakefile.hs:
     the most important of them. 
   * Quasy-quotation is used to simplify the shell code. `[cmd||]` takes a string
     as an argument. It's syntax is the following:
-        *  $name untiquotes hasell expressions of type File, Variable plus few
-           others. They define a prerequisites of a rule
-        *  @name untiquotes hasell expressions of type File. They define rule's
-           targets
-        * complex expressions are also supported with $() and @().
+    *  $name untiquotes hasell expressions of type File, Variable plus few
+       others. They define a prerequisites of a rule
+    *  @name untiquotes hasell expressions of type File. They define rule's
+       targets
+    *  complex expressions are also supported with $() and @().
   * Rules appears in the Makefile in the reversed order. Normally, you want 'all'
     rule to be at the bottom.
 
