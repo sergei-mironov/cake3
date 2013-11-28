@@ -30,7 +30,7 @@ module Development.Cake3 (
   , depend
   , before
   , produce
-  , unsafe
+  , ignoreDepends
   , merge
   , selfUpdateRule
   , prebuild
@@ -48,6 +48,7 @@ module Development.Cake3 (
   -- Make parts
   , prerequisites
   , shell
+  , unsafeShell
   , cmd
   , makevar
   , extvar
@@ -112,7 +113,7 @@ selfUpdateRule = do
     shell (CommandGen' (
       concat <$> sequence [
         refInput $ (fromFilePath ".") </> "Cakegen"
-      , refMerge $ string " > "
+      , refInput $ string " > "
       , refOutput makefile]))
     get
 
@@ -156,13 +157,6 @@ phony name = do
 
 rule :: (MonadMake m) => A a -> m a
 rule act = liftMake $ snd <$> withPlacement (rule' act)
-
--- FIXME: depend can be used under unsafe but it doesn't work
-unsafe :: A () -> A ()
-unsafe action = do
-  r <- get
-  action
-  modify $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
 
 before :: Make Recipe -> A ()
 before mx =  liftMake mx >>= refInput >> return ()

@@ -198,15 +198,22 @@ commandGen mcmd = CommandGen' mcmd
 addCommands :: (Monad m) => [Command] -> A' m ()
 addCommands lines = modify (\r -> r { rcmd = (rcmd r) ++ lines })
 
-shell' :: (Monad m) => CommandGen' m -> A' m [File]
-shell' cmdg = do
+ignoreDepends :: (Monad m) => A' m a -> A' m a
+ignoreDepends action = do
+  r <- get
+  a <- action
+  modify $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
+  return a
+
+shell :: (Monad m) => CommandGen' m -> A' m [File]
+shell cmdg = do
   line <- unCommand cmdg
   addCommands [line]
   r <- get
   return (S.toList (rtgt r))
 
-shell :: CommandGen -> A [File]
-shell = shell'
+unsafeShell :: (Monad m) => CommandGen' m -> A' m [File]
+unsafeShell cmdg = ignoreDepends (shell cmdg)
 
 newtype Reference = Reference String
 
@@ -223,10 +230,10 @@ instance ReferenceLike File where
 class (Monad m) => RefMerge m x where
   refMerge :: x -> A' m Command
 
-instance (Monad m) => RefMerge m Variable where
-  refMerge v@(Variable n _) = do
-    addVariable v
-    return_text $ printf "$(%s)" n
+-- instance (Monad m) => RefMerge m Variable where
+--   refMerge v@(Variable n _) = do
+--     addVariable v
+--     return_text $ printf "$(%s)" n
 
 refMergeList xs = spacify $ mapM refMerge xs
 
@@ -241,10 +248,6 @@ instance RefMerge m x => RefMerge m (Set x) where
 
 instance (Monad m) => RefMerge m (CommandGen' m) where
   refMerge cg = unCommand cg
-
-instance (Monad m) => RefMerge m Reference where
-  refMerge v@(Reference s) = do
-    return_text s
 
 -- instance (Monad m) => RefMerge m Command where
 --   refMerge = return
@@ -264,6 +267,7 @@ instance (Monad m) => RefOutput m File where
 -- instance RefOutput m x => RefOutput m [x] where
 --   refOutput xs = concat `liftM` mapM refOutput xs
 
+-- FIXME: inbetween will not notice if spaces are already exists
 inbetween x mx = (concat`liftM`mx) >>= \l -> return (inbetween' x l) where
   inbetween' x [] = []
   inbetween' x [a] = [a]
@@ -315,6 +319,15 @@ instance (RefInput a m x) => RefInput a m (Maybe x) where
   refInput mx = case mx of
     Nothing -> return mempty
     Just x -> refInput x
+
+instance (MonadAction a m) => RefInput a m Variable where
+  refInput v@(Variable n _) = liftAction $ do
+    addVariable v
+    return_text $ printf "$(%s)" n
+
+instance (MonadAction a m) => RefInput a m Reference where
+  refInput v@(Reference s) = do
+    return_text s
 
 depend :: (RefInput a m x) => x -> a ()
 depend x = refInput x >> return ()

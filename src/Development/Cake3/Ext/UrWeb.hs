@@ -179,11 +179,11 @@ uwlib urpfile m = do
       let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
       let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
       rule $ do
-        shell [cmd| $cc -c -I $incl -o %o @(o .= "c") |]
+        shell [cmd| $cc -c -I $incl -o @o $(o .= "c") |]
 
     depend (urpDeps u)
     depend (urpLibs u)
-    shell [cmd|touch %urpfile|]
+    shell [cmd|touch @urpfile|]
     return u
 
   return $ UWLib u
@@ -237,7 +237,7 @@ library :: (MonadMake m) => UrpLibReference -> UrpGen m ()
 library (UrpLibStandalone l) = do
   library' l
   when ((toFilePath $ takeDirectory l) /= ".") $ do
-    prebuild [cmd| $make -C @(takeDirectory l) |]
+    prebuild [cmd| $(make) -C $(takeDirectory l) |]
 library (UrpLibInternal (UWLib u)) = library' (urp u)
 library (UrpLibEmbed ue) = error "urembed is not defined"
 
