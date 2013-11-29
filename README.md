@@ -132,23 +132,26 @@ Here is the example of simple Cakefile.hs:
 Features and limitations
 ------------------------
 
-Thirdcake follows Autoconf's path in a sence that it generates Makefile which
-can be used with current and modified (up to some level) environment but has to
-be regenerated when environment modifications exceeds that level.
+Thirdcake follows Autoconf's path in a sence that it builds the program may do
+some checks and tests and generates the Makefile. In the same time, the idea of
+this EDSL is to move as much logic as possible in the final Makefile, to drop
+the cake3 dependency at the build time.
 
-Currently, the tool doesn't support pattern rules and variable-level functions
-so nearly all the computatinos should be done at Haskell level. However, as a
-reward, thirdcake protect the develper from a number of common make-specific
-mistakes.
+Of cause, it is possible up to some degree. For example, Cake3 doe not provide a
+way to scan the project tree with Make's wildcards. But it is possible and may
+be implemented in future.
+
+Still, some common patterns are supported so I hope that users would call
+resulting Makefiles safe and robust enough for, say, package maintainers.
 
 ### Features
 
-  * *Spaces inside the filenames*
+  * *Allows spaces inside the filenames.*
   
     Everyone knows that Makefiles don't like spaces in filenames. Cake3
     carefully inserts '\ ' to make make happy.
 
-  * *Rebuild a rule when variable changes.*
+  * *Rebuilds a rule when variable changes.*
   
     Consider following antipattern:
 
@@ -170,7 +173,7 @@ mistakes.
 
     will rebuild `out` on FLAGS change
  
-  * *A rule with multiple targets.*
+  * *Supports rules with more than one target.*
     
     It is not that simple to write a rule which has more than one target. Really,
         
@@ -188,7 +191,13 @@ mistakes.
 
     will always notice inputs changes and rebuild both outputs
 
-  * *Makefiles hierarchy.*
+  * *Supports global prebuild\postbuild actions*
+
+    Common human-made Makefile with prebuild commands would support them for one
+    rule, typically, "all". Other targets often stay uncovered. Cake3 makes sure
+    that actions are executed for any target you call.
+
+  * *Lets user organize build hierarchy.*
   
     Say, we have a project A with subproject L. L has it's own Makefile and we
     want to re-use it from our global A/Makefile. Make provides only two ways of
@@ -197,25 +206,43 @@ mistakes.
     hard work. Second approach is OK, but only if we don't need to pass
     additional paramters or depend on a specific rule from L.
 
-    Thirdcake's approach in this case is a compromise: it employs Haskell's
-    import mechanism so it is possible to import L/Cakefile.hs from
+    Thirdcake's approach in this case is a compromise: since it employs
+    Haskell's module system, it is possible to write:
+
+        -- Project/lib/CakeLib.hs
+        import CakeLib_P.hs
+        librule = do
+          rule $ do
+            shell [cmd|build a lib|]
+
+        -- Project/Cakefile.hs
+        import Cakefile_P.hs
+        import CakeLib.hs 
+        -- ^ note the absence of lib folder here. cake3 will copy all Cake*hs to
+        --   the temp dir, then build them there.
+
+        all = do
+          lib <- librule
+          rule $ do
+            shell [cmd|build an app with $lib |]
+
     A/Cakefile.hs and do whatever you want to. Resulting makefiles will always
     be monolitic.
 
 ### Limitations
 
   * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
-    and others) are needed to make various tricks to work.
-  * Coreutils package is required because resulting Makefile calls md5sum and
-    cut programs.
+    and others) are needed to make various tricks to work. Also, posix
+    environment with coreututils package is required. So, Linux, Probably Mac,
+    Probably Windows+Cygwin.
+  * ifdef/endif instructions are not supported generally. User has to move this
+    logic in Haskell for now.
+  * Make funcitions, wildcards and other variable-related things are not
+    checked.  It is user's responsibility to keep things safe.
+  * Variable as targets are not supported. Please, implement this logic in
+    Haskell for now.
   * All Cakefiles across the project tree should have unique names in order to
     be copied. Duplicates are found, the first one is used
-  * Posix environment is required. So, Linux, Probably Mac, Probably
-    Windows+Cygwin.
-  * Wildcards are not supported in the output Makefile language subset. I plan
-    to experiment with supporting them, but think that space problem will
-    probably arise.
-  * Variables-as-targets are also not supported.
 
 Random implementation details
 -----------------------------

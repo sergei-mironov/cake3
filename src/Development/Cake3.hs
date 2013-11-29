@@ -9,7 +9,7 @@ module Development.Cake3 (
   , Recipe
   , RefInput(..)
   , RefOutput(..)
-  , RefMerge(..)
+  -- , RefMerge(..)
   -- , Placable(..)
   , Reference
   , ReferenceLike(..)
@@ -25,13 +25,14 @@ module Development.Cake3 (
 
   -- Rules
   , rule
+  , rule2
   , rule'
   , phony
   , depend
   , before
   , produce
   , ignoreDepends
-  , merge
+  -- , merge
   , selfUpdateRule
   , prebuild
   , postbuild
@@ -143,8 +144,8 @@ withPlacement mk = do
     addPlacement 0 (S.findMin (rtgt r))
     return (r,a)
 
-rule' :: (MonadMake m) => A a -> m (Recipe,a)
-rule' act = liftMake $ do
+rule2 :: (MonadMake m) => A a -> m (Recipe,a)
+rule2 act = liftMake $ do
   loc <- getLoc
   (r,a) <- runA loc act
   addRecipe r
@@ -155,8 +156,11 @@ phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
-rule :: (MonadMake m) => A a -> m a
-rule act = liftMake $ snd <$> withPlacement (rule' act)
+rule :: A a -> Make a
+rule act = snd <$> withPlacement (rule2 act)
+
+rule' :: (MonadMake m) => A a -> m a
+rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
 before :: Make Recipe -> A ()
 before mx =  liftMake mx >>= refInput >> return ()

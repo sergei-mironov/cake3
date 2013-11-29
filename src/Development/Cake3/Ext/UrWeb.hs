@@ -165,7 +165,7 @@ line s = tell (s++"\n")
 
 uwlib :: File -> UrpGen (A' Make) () -> Make UWLib
 uwlib urpfile m = do
-  (_,u) <- rule' $ do
+  (_,u) <- rule2 $ do
     ((),s) <- runStateT (unUrpGen m) (defState urpfile)
     let u@(Urp _ _ hdr mod) = urpst s
     let up = urpUp urpfile
@@ -178,7 +178,7 @@ uwlib urpfile m = do
     forM_ (urpObjs u) $ \o -> do
       let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
       let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
-      rule $ do
+      rule2 $ do
         shell [cmd| $cc -c -I $incl -o @o $(o .= "c") |]
 
     depend (urpDeps u)

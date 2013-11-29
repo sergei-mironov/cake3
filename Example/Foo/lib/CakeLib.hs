@@ -1,29 +1,25 @@
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, OverloadedStrings, ScopedTypeVariables #-}
 
 module CakeLib where
 
 import Development.Cake3
-import CakeLib_P (file)
+import CakeLib_P
 
-librules var = do
-  o <- ofiles var
-  c <- clean var
-  return $ o ++ [c]
+os (var::Variable) = do
+  let c = file "lib.c"
+  rule $ do
+    shell [cmd| gcc -c -I lib $var -o @(c.="o") $c |]
 
-clean :: Variable -> Make Alias
-clean var = phonyM "clean" $ do
-  unsafe (shell [cmd| rm $(ofiles var) |])
+defaultFlags = makevar "CFLAGS" ""
 
-ofiles :: Variable -> Make [Alias]
-ofiles var = mdo
-  let parseSomething = return (file "lib.c")
-  c <- parseSomething
-  o <- ruleM [c .= "o"] $ do
-    shell [cmd| gcc -c -I lib $var -o $o $c |]
-  return o
+main = writeMake "Makefile" $ do
+  fs <- os defaultFlags
 
-main = runMake_ $ do
-  let var = makevar "CFLAGS" ""
-  place $ ofiles var
-  place $ clean var
+  rule $ do
+    phony "clean"
+    unsafeShell [cmd| rm $(fs)|]
+
+  rule $ do
+    phony "all"
+    depend fs
+

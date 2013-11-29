@@ -227,15 +227,15 @@ instance ReferenceLike File where
   string f = Reference (toFilePath f)
 
 
-class (Monad m) => RefMerge m x where
-  refMerge :: x -> A' m Command
+-- class (Monad m) => RefMerge m x where
+--   refMerge :: x -> A' m Command
 
 -- instance (Monad m) => RefMerge m Variable where
 --   refMerge v@(Variable n _) = do
 --     addVariable v
 --     return_text $ printf "$(%s)" n
 
-refMergeList xs = spacify $ mapM refMerge xs
+-- refMergeList xs = spacify $ mapM refMerge xs
 
 -- instance (Monad m) => RefMerge m [File] where
 --   refMerge xs = spacify $ map refMerge xs
@@ -243,11 +243,11 @@ refMergeList xs = spacify $ mapM refMerge xs
 -- instance (Monad m) => RefMerge m [String] where
 --   refMerge xs = flap $ map refMerge xs
 
-instance RefMerge m x => RefMerge m (Set x) where
-  refMerge xs = refMergeList (S.toList xs)
+-- instance RefMerge m x => RefMerge m (Set x) where
+--   refMerge xs = refMergeList (S.toList xs)
 
-instance (Monad m) => RefMerge m (CommandGen' m) where
-  refMerge cg = unCommand cg
+-- instance (Monad m) => RefMerge m (CommandGen' m) where
+--   refMerge cg = unCommand cg
 
 -- instance (Monad m) => RefMerge m Command where
 --   refMerge = return
@@ -315,6 +315,9 @@ instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
 instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
   refInput mr = liftMake mr >>= refInput
 
+instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
+  refInput mx = liftMake mx >>= refInput
+
 instance (RefInput a m x) => RefInput a m (Maybe x) where
   refInput mx = case mx of
     Nothing -> return mempty
@@ -335,8 +338,8 @@ depend x = refInput x >> return ()
 produce :: (RefOutput m x) => x -> A' m ()
 produce x = refOutput x >> return ()
 
-merge :: (RefMerge m x) => x -> A' m ()
-merge x = refMerge x >> return ()
+-- merge :: (RefMerge m x) => x -> A' m ()
+-- merge x = refMerge x >> return ()
 
 variables :: (Monad m) => (Set Variable) -> A' m ()
 variables vs = modify (\r -> r { rvars = (rvars r) `mappend` vs } )
