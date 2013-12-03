@@ -80,13 +80,14 @@ knows how to do the rest.
 
 Here is the example of simple Cakefile.hs:
 
-    {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
     module Cakefile where
 
     import Development.Cake3
     import Cakefile_P
 
     main = writeMake "Makefile" $ do
+
+      selfUpdate
 
       cs <- filterDirectoryContentsRecursive [".c"]
 
