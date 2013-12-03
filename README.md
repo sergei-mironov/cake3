@@ -261,7 +261,8 @@ Random implementation details
      different names even if they are in different directories due to GHC import
      restrictions. This way user can import one cakefile from another, as if
      they were in the same directory. Actually, cake3 copies all cakefiles into
-     one temporary directory and compiles them there.
+     one temporary directory and compiles them there. Note that cake3 calls ghc
+     having several common haskell extentions enabled.
 
   2. Cake3 copies all Cake\*.hs files from your project tree into temporary dir
      and compiles them with GHC (or calls GHCi). Before that, it creates a
