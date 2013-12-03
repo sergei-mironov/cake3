@@ -16,9 +16,10 @@ import Data.Set (Set)
 
 import System.FilePath.Wrapper
 
--- | Makefile variable
+-- | The representation of Makefile variable
 data Variable = Variable {
     vname :: String
+  -- ^ The name of a variable
   , vval :: Maybe String
   -- ^ Nothing means that variable is defined elsewhere (eg. borrowed from the
   -- environment)
@@ -40,7 +41,9 @@ return_file f = return [CmdFile f]
 data Flag = Phony | Intermediate
   deriving(Show,Eq,Ord, Data, Typeable)
 
--- | Recipe answers to the question 'How to build the targets'
+-- | Recipe answers to the question 'How to build the targets'. Internally, it
+-- contains sets of targets and prerequisites, as well as shell commands
+-- required to build former from latter
 data Recipe = Recipe {
     rtgt :: Set File
   -- ^ Targets 

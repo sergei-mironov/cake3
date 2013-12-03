@@ -44,20 +44,33 @@ import System.FilePath.Wrapper
 
 type Location = String
 
+-- | MakeState describes the state of the EDSL synthesizers during the
+-- the program execution.
 data MakeState = MS {
     prebuilds :: Recipe
+    -- ^ Prebuild commands. targets/prerequsites of the recipe are ignored,
+    -- commands are executed before any target
   , postbuilds :: Recipe
+    -- ^ Postbuild commands.
   , recipes :: Set Recipe
+    -- ^ The set of recipes
   , sloc :: Location
+    -- ^ Current location. FIXME: fix or remove
   , makeDeps :: Set File
+    -- ^ Set of files which the Makefile depends on
   , placement :: [File]
+    -- ^ Placement list is the order of targets to be placed in the output file
   , includes :: Set File
+    -- ^ Set of files to include in the output file (Makefile specific thing)
   , errors :: String
+    -- ^ Errors found so far
   , warnings :: String
+    -- ^ Warnings found so far
+  , outputFile :: File
   }
 
 -- Oh, such a boilerplate
-initialMakeState = MS defr defr mempty mempty mempty mempty mempty mempty mempty where
+initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf where
   defr = emptyRecipe "<internal>"
 
 getPlacementPos :: Make Int
@@ -67,10 +80,10 @@ addPlacement :: Int -> File -> Make ()
 addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms) } where
   insertInto x xs = let (h,t) = splitAt pos xs in h ++ (x:t)
 
--- State that target Makefile depends on a File f.
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
+-- | Add prebuild command
 prebuild, postbuild :: (MonadMake m) => CommandGen -> m ()
 prebuild cmdg = liftMake $ do
   s <- get
@@ -85,26 +98,31 @@ postbuild cmdg = liftMake $ do
 -- addSubproject :: File -> [Command] -> Make ()
 -- addSubproject f cmds = modify (\ms -> ms { subprojects = M.insert f cmds (subprojects ms) })
 
-checkForEmptyTarget :: MakeState -> String
-checkForEmptyTarget ms = foldl' checker mempty (recipes ms) where
+-- | Find recipes without targets
+checkForEmptyTarget :: (Foldable f) => f Recipe -> String
+checkForEmptyTarget rs = foldl' checker mempty rs where
   checker es r | S.null (rtgt r) = es++e
                | otherwise = es where
     e = printf "Error: Recipe without targets\n\t%s\n" (show r)
 
-checkForTargetConflicts :: MakeState -> String
-checkForTargetConflicts ms = foldl' checker mempty (groupRecipes (recipes ms)) where
+-- | Find recipes sharing a target
+checkForTargetConflicts :: (Foldable f) => f Recipe -> String
+checkForTargetConflicts rs = foldl' checker mempty (groupRecipes rs) where
   checker es rs | S.size rs > 1 = es++e
                 | otherwise = es where
     e = printf "Error: Recipes share one or more targets\n\t%s\n" (show rs)
 
 
-class (MonadIO m) => MonadMake m where
-  liftMake :: Make a -> m a
+-- | A Monad providing access to MakeState. TODO: not mention IO here.
+class (Monad m) => MonadMake m where
+  liftMake :: (Make' IO) a -> m a
 
-newtype Make a = Make { unMake :: (StateT MakeState IO) a }
+newtype Make' m a = Make { unMake :: (StateT MakeState m) a }
   deriving(Monad, Functor, Applicative, MonadState MakeState, MonadIO, MonadFix)
 
-instance MonadMake Make where
+type Make a = Make' IO a
+
+instance MonadMake (Make' IO) where
   liftMake = id
 
 instance (MonadMake m) => MonadMake (A' m) where
@@ -114,13 +132,12 @@ instance (MonadMake m) => MonadMake (StateT s m) where
   liftMake = lift . liftMake
 
 
--- | Returns either error or a tuple containing: 1) the set of all variables 2) the set of recipes
--- 3) the user-defined order of targets in the final Makefile
-evalMake :: Make a -> IO MakeState
-evalMake mk = do
-  ms <- flip execStateT initialMakeState (unMake mk)
+-- | Returns a MakeState
+evalMake :: (Monad m) => File -> Make' m a -> m MakeState
+evalMake mf mk = do
+  ms <- flip execStateT (initialMakeState mf) (unMake mk)
   return ms {
-    errors = checkForEmptyTarget ms ++ checkForTargetConflicts ms
+    errors = checkForEmptyTarget (recipes ms) ++ checkForTargetConflicts (recipes ms)
   }
 
 modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
@@ -139,65 +156,80 @@ includeMakefile fs = foldl' scan (return ()) fs where
     modify $ \ms -> ms {includes = S.insert f (includes ms)}
     return ()
 
-instance MonadLoc Make where
+instance (Monad m) => MonadLoc (Make' m) where
   withLoc l' (Make um) = Make $ do
     modifyLoc (\l -> l') >> um
 
+-- | A here stands for Action. It is a State monad carrying a Recipe under
+-- construction. It is the recipe builder, i.e. it provides the way of tweaking
+-- it's recipe.
 newtype A' m a = A' { unA' :: StateT Recipe m a }
   deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO,MonadFix)
 
-type A a = A' Make a
+type A a = A' (Make' IO) a
 
+-- | A class of monads providing access to the underlying A monad
 class (Monad m, Monad t) => MonadAction t m | t -> m where
   liftAction :: A' m x -> t x
 
 instance (Monad m) => MonadAction (A' m) m where
   liftAction = id
 
+-- | Run the Action monad, using already existing Recipe as input.
 runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
 runA' r act = do
   (a,r) <- runStateT (unA' act) r
   return (r,a)
 
+-- | Create new empty recipe and run action on it.
 runA :: (Monad m) => String -> A' m a -> m (Recipe, a)
 runA loc act = runA' (emptyRecipe loc) act
 
+-- | Version of runA discarding the result of A's computation
 runA_ :: (Monad m) => String -> A' m a -> m Recipe
 runA_ loc act = runA loc act >>= return .fst
 
+-- | Add a variable to the Recipe under construction
 addVariable :: (Monad m) => Variable -> A' m ()
 addVariable v = modify $ \r -> r { rvars = S.insert v (rvars r) }
 
+-- | Get a list of targets added so far
 targets :: (Applicative m, Monad m) => A' m (Set File)
 targets = rtgt <$> get
 
+-- | Get a list of prerequisites added so far
 prerequisites :: (Applicative m, Monad m) => A' m (Set File)
 prerequisites = rsrc <$> get
 
+-- | Mark the recipe as 'PHONY' i.e. claim that all it's targets are not real
+-- files. Makefile-specific.
 markPhony :: (Monad m) => A' m ()
 markPhony = modify $ \r -> r { rflags = S.insert Phony (rflags r) }
 
+-- | Mark the recipe as 'INTERMEDIATE' i.e. claim that all it's targets may be
+-- removed after the build process. Makefile-specific.
 markIntermediate :: (Monad m) => A' m ()
 markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) }
 
-readFile :: File -> A String
-readFile f = do
-  A' (lift $ addMakeDep f)
-  liftIO (IO.readFile (toFilePath f))
-
+-- | Obtain the contents of a File. Note, that this generally means, that
+-- Makefile should be regenerated each time the File is changed.
 readFileForMake :: (MonadMake m) => File -> m BS.ByteString
 readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (toFilePath f)))
 
--- | CommandGen is a recipe packed in the newtype to prevent partial expantion
+-- | CommandGen is a recipe-builder packed in the newtype to prevent partial
+-- expantion of it's commands
 newtype CommandGen' m = CommandGen' { unCommand :: A' m Command }
-type CommandGen = CommandGen' Make
+type CommandGen = CommandGen' (Make' IO)
 
+-- | Pack the command builder into a CommandGen
 commandGen :: A Command -> CommandGen
 commandGen mcmd = CommandGen' mcmd
 
+-- | Add some commanfs to the recipe under construction
 addCommands :: (Monad m) => [Command] -> A' m ()
 addCommands lines = modify (\r -> r { rcmd = (rcmd r) ++ lines })
 
+-- | Ignore the depends of a recipe builder
 ignoreDepends :: (Monad m) => A' m a -> A' m a
 ignoreDepends action = do
   r <- get
@@ -205,6 +237,7 @@ ignoreDepends action = do
   modify $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
   return a
 
+-- | Apply the recipe builder to the current recipe state.
 shell :: (Monad m) => CommandGen' m -> A' m [File]
 shell cmdg = do
   line <- unCommand cmdg
@@ -212,50 +245,21 @@ shell cmdg = do
   r <- get
   return (S.toList (rtgt r))
 
+-- | Apply the recipe builder to the current recipe state, but don't count it's
+-- dependencies
 unsafeShell :: (Monad m) => CommandGen' m -> A' m [File]
 unsafeShell cmdg = ignoreDepends (shell cmdg)
 
-newtype Reference = Reference String
+-- | It is quite dangerous to refer to strings from inside quasy-quoters so here
+-- is the wrapper. RefInput instance is defined for it.
+newtype CakeString = CakeString String
+  deriving(Show,Eq,Ord)
 
-class ReferenceLike a where
-  string :: a -> Reference
+string :: String -> CakeString
+string = CakeString
 
-instance ReferenceLike String where
-  string s = Reference s
-
-instance ReferenceLike File where
-  string f = Reference (toFilePath f)
-
-
--- class (Monad m) => RefMerge m x where
---   refMerge :: x -> A' m Command
-
--- instance (Monad m) => RefMerge m Variable where
---   refMerge v@(Variable n _) = do
---     addVariable v
---     return_text $ printf "$(%s)" n
-
--- refMergeList xs = spacify $ mapM refMerge xs
-
--- instance (Monad m) => RefMerge m [File] where
---   refMerge xs = spacify $ map refMerge xs
-
--- instance (Monad m) => RefMerge m [String] where
---   refMerge xs = flap $ map refMerge xs
-
--- instance RefMerge m x => RefMerge m (Set x) where
---   refMerge xs = refMergeList (S.toList xs)
-
--- instance (Monad m) => RefMerge m (CommandGen' m) where
---   refMerge cg = unCommand cg
-
--- instance (Monad m) => RefMerge m Command where
---   refMerge = return
-
--- instance (Monad m) => RefMerge m [Command] where
---   refMerge = refMergeList
-
-
+-- | Class of things which may be referenced using '\@(expr)' from inside
+-- quasy-quoted shell expressions
 class (Monad m) => RefOutput m x where
   refOutput :: x -> A' m Command
 
@@ -263,9 +267,6 @@ instance (Monad m) => RefOutput m File where
   refOutput f = do
     modify $ \r -> r { rtgt = f `S.insert` (rtgt r)}
     return_file f
-
--- instance RefOutput m x => RefOutput m [x] where
---   refOutput xs = concat `liftM` mapM refOutput xs
 
 -- FIXME: inbetween will not notice if spaces are already exists
 inbetween x mx = (concat`liftM`mx) >>= \l -> return (inbetween' x l) where
@@ -286,9 +287,8 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
     Nothing -> return mempty
     Just x -> refOutput x
 
--- | Data structure x may be referenced from within the command. Referal
--- class specifies side effects of such referencing. For example, referencig the
--- file leads to adding it to the prerequisites list.
+-- | Class of things which may be referenced using '\$(expr)' from inside
+-- of quasy-quoted shell expressions
 class (MonadAction a m) => RefInput a m x where
   refInput :: x -> a Command
 
@@ -299,9 +299,6 @@ instance (MonadAction a m) => RefInput a m File where
 
 instance (MonadAction a m) => RefInput a m Recipe where
   refInput r = refInput (rtgt r)
-
--- instance RefInput m x => RefInput m [x] where
---   refInput xs = concat `liftM` mapM refInput xs
 
 instance (RefInput a m x) => RefInput a m [x] where
   refInput xs = spacify $ mapM refInput xs
@@ -328,28 +325,35 @@ instance (MonadAction a m) => RefInput a m Variable where
     addVariable v
     return_text $ printf "$(%s)" n
 
-instance (MonadAction a m) => RefInput a m Reference where
-  refInput v@(Reference s) = do
+instance (MonadAction a m) => RefInput a m CakeString where
+  refInput v@(CakeString s) = do
     return_text s
 
+-- | Add it's argument to the list of dependencies (prerequsites) of a current
+-- recipe under construction
 depend :: (RefInput a m x) => x -> a ()
 depend x = refInput x >> return ()
 
+-- | Add it's argument to the list of targets of a current recipe under
+-- construction
 produce :: (RefOutput m x) => x -> A' m ()
 produce x = refOutput x >> return ()
 
--- merge :: (RefMerge m x) => x -> A' m ()
--- merge x = refMerge x >> return ()
-
+-- | Add it's argument to the list of variables referenced by the current recipe
 variables :: (Monad m) => (Set Variable) -> A' m ()
 variables vs = modify (\r -> r { rvars = (rvars r) `mappend` vs } )
 
+-- | Add it's argument to the list of commands of a current recipe under
+-- construction. Warning: this function behaves like unsafeShell i.e. it doesn't
+-- analyze the command text
 commands :: (Monad m) => [Command] -> A' m ()
 commands cmds = modify (\r -> r { rcmd = (rcmd r) ++ cmds } )
 
+-- | Set the recipe's location in the Cakefile.hs
 location :: (Monad m) => String -> A' m ()
 location l  = modify (\r -> r { rloc = l } )
 
+-- | Set additional flags
 flags :: (Monad m) => Set Flag -> A' m ()
 flags f = modify (\r -> r { rflags = (rflags r) `mappend` f } )
 
@@ -357,12 +361,12 @@ flags f = modify (\r -> r { rflags = (rflags r) `mappend` f } )
 -- $VARs. Each $VAR will be dereferenced using Ref typeclass. Result will
 -- be equivalent to
 --
--- return Command $ do
---   s1 <- refInput "gcc "
---   s2 <- refInput (flags :: Variable)
---   s3 <- refInput " "
---   s4 <- refInput (file :: File)
---   return (s1 ++ s2 ++ s3)
+--    return Command $ do
+--      s1 <- refInput "gcc "
+--      s2 <- refInput (flags :: Variable)
+--      s3 <- refInput " "
+--      s4 <- refInput (file :: File)
+--      return (s1 ++ s2 ++ s3)
 --
 -- Later, this command may be examined or passed to the shell function to apply
 -- it to the recepi
@@ -383,6 +387,5 @@ cmd = QuasiQuoter
                                   Right e -> case c of
                                     '$' -> appE [| refInput |] (return e)
                                     '@' -> appE [| refOutput |] (return e)
-                                    -- _   -> appE [| refMerge |] (return e)
       in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
 

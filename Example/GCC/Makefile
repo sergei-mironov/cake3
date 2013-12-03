@@ -8,16 +8,20 @@ ifdef MAIN
 # Main section
 
 .PHONY: all
-all: ./main.elf
+all: ./Makefile ./main.elf
 .PHONY: clean
-clean: 
+clean: ./Makefile
 	rm ./main.elf ./main\ space.o ./depend.mk
-./main.elf: ./main\ space.o
+./main.elf: ./Makefile ./main\ space.o
 	gcc -o ./main.elf ./main\ space.o
-./main\ space.o: ./main\ space.c $(call GUARD,CFLAGS)
+./main\ space.o: ./Makefile ./main\ space.c $(call GUARD,CFLAGS)
 	gcc -c $(CFLAGS) -o ./main\ space.o ./main\ space.c
-./depend.mk: ./main\ space.c
+./depend.mk: ./Makefile ./main\ space.c
 	gcc -M ./main\ space.c -MF ./depend.mk
+./Cakegen: ./Cakefile.hs
+	cake3
+./Makefile: ./Cakegen
+	./Cakegen
 $(call GUARD,CFLAGS):
 	rm -f .GUARD_CFLAGS_*
 	touch $@
@@ -37,8 +41,15 @@ clean: .fix-multy1
 ./main\ space.o: .fix-multy1
 .PHONY: ./depend.mk
 ./depend.mk: .fix-multy1
+.PHONY: ./Cakegen
+./Cakegen: .fix-multy1
+.PHONY: ./Makefile
+./Makefile: .fix-multy1
 .INTERMEDIATE: .fix-multy1
 .fix-multy1: 
+	@echo "*****************"
+	@echo "THE CAKE3 EXAMPLE"
+	@echo "*****************"
 	$(MAKE) MAIN=1 $(MAKECMDGOALS)
 
 endif

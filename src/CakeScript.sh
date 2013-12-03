@@ -12,10 +12,13 @@ cat <<EOF
 
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
-module ${1}_P(file,cakefiles,filterDirectoryContentsRecursive) where
+{-# LANGUAGE QuasiQuotes #-}
+module ${1}_P(file, cakefiles, selfUpdate,filterDirectoryContentsRecursive) where
 
 import Control.Monad.Trans
+import Control.Monad.State
 import Development.Cake3
+import Development.Cake3.Monad
 import Development.Cake3.Utils.Find
 import GHC.Exts (IsString(..))
 
@@ -24,8 +27,8 @@ pl = ProjectLocation projectroot moduleroot
 file :: String -> File
 file x = file' pl x
 
-instance IsString File where
-  fromString = file
+-- instance IsString File where
+--   fromString = file
 
 projectroot :: FilePath
 projectroot = "$TOP"
@@ -39,6 +42,18 @@ cakefiles =
   case "$2" of
     "$TOP" -> map (file' rl) ($3)
     _ -> error "cakefiles are defined for top-level cake only"
+
+selfUpdate :: Make [File]
+selfUpdate = do
+  makefile <- outputFile <$> get
+  (_,cg) <- rule2 $ do
+    depend cakefiles
+    produce (file "Cakegen")
+    shell [cmd|cake3|]
+  (_,f) <- rule2 $ do
+    produce makefile
+    shell [cmd|\$cg|]
+  return f
 
 filterDirectoryContentsRecursive :: (MonadIO m) => [String] -> m [File]
 filterDirectoryContentsRecursive exts = liftM (filterExts exts) (getDirectoryContentsRecursive (file "."))
@@ -80,6 +95,7 @@ EOF
 
 ARGS_PASS=""
 GHCI=n
+GHC_EXTS="-XFlexibleInstances -XTypeSynonymInstances -XOverloadedStrings -XQuasiQuotes"
 
 while test -n "$1" ; do
   case "$1" in
@@ -123,6 +139,7 @@ cakes() {
     | sort
 }
 
+OIFS=$IFS
 IFS=$'\n'
 CAKES=`cakes`
 CAKELIST="[]"
@@ -176,12 +193,14 @@ if test -z "$MAIN" ; then
   die "No Cake* file exist in the current directory. Consider running \`cake3 --help'."
 fi
 
+IFS=$OIFS
+
 (
 set -e
 cd $T
 case $GHCI in
-  n) ghc --make "$MAIN_" -main-is "$MAIN" -o Cakegen ;;
-  y) exec ghci -main-is "$MAIN" ;;
+  n) ghc --make "$MAIN_" $GHC_EXTS -main-is "$MAIN" -o Cakegen ;;
+  y) exec ghci -main-is "$MAIN" $GHC_EXTS ;;
 esac
 
 cp -t "$CWD" Cakegen

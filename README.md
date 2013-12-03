@@ -231,16 +231,23 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
 
 ### Limitations
 
+#### Make syntax
+
+  * Make is not able to detect directory content chages. For example, user has
+    to re-run ./Cakegen if they add/delete a source file. This is on my TODO list.
+  * ifdef/endif instructions are not supported generally. User has to move this
+    logic in Haskell for now. Also on TODO list
+  * Make funcitions, wildcards and other variable-related things are not
+    checked.  It is user's responsibility to keep things safe.
+  * Variables as targets are not supported. Implement this logic in Haskell for
+    now.
+
+#### General
+
   * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
     and others) are needed to make various tricks to work. Also, posix
     environment with coreututils package is required. So, Linux, Probably Mac,
     Probably Windows+Cygwin.
-  * ifdef/endif instructions are not supported generally. User has to move this
-    logic in Haskell for now.
-  * Make funcitions, wildcards and other variable-related things are not
-    checked.  It is user's responsibility to keep things safe.
-  * Variable as targets are not supported. Please, implement this logic in
-    Haskell for now.
   * All Cakefiles across the project tree should have unique names in order to
     be copied. Duplicates are found, the first one is used
 

@@ -163,7 +163,7 @@ toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-uwlib :: File -> UrpGen (A' Make) () -> Make UWLib
+uwlib :: File -> UrpGen (A' (Make' IO)) () -> Make UWLib
 uwlib urpfile m = do
   (_,u) <- rule2 $ do
     ((),s) <- runStateT (unUrpGen m) (defState urpfile)
@@ -188,7 +188,7 @@ uwlib urpfile m = do
 
   return $ UWLib u
 
-uwapp :: String -> File -> UrpGen (A' Make) () -> Make UWExe
+uwapp :: String -> File -> UrpGen (A' (Make' IO)) () -> Make UWExe
 uwapp opts urpfile m = do
   (UWLib u') <- uwlib urpfile m
   let u = u' { uexe = Just (urpfile .= "exe") }
@@ -198,7 +198,7 @@ uwapp opts urpfile m = do
     case urpSql' u of
       Nothing -> return ()
       Just sql -> produce sql
-    shell [cmd|urweb $(string opts) $(string ((takeDirectory urpfile)</>(takeBaseName urpfile)))|]
+    unsafeShell [cmd|urweb $(string opts) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
   return $ UWExe u
 
 liftUrp m = m
@@ -363,12 +363,12 @@ parse_js contents = do
     hio :: (MonadIO m) => Handle -> String -> m ()
     hio h = liftIO . hPutStrLn h
 
-bin :: (MonadMake m) => File -> File -> UrpGen m ()
+bin :: (MonadIO m, MonadMake m) => File -> File -> UrpGen m ()
 bin dir src = do
   c <- readFileForMake src
   bin' dir (toFilePath src) c
 
-bin' :: (MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
+bin' :: (MonadIO m, MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
 bin' dir src_name src_contents = do
 
   let mime = guessMime src_name

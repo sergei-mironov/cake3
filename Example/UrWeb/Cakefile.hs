@@ -1,11 +1,12 @@
-{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 module Cakefile where
 
 import Development.Cake3
 import Development.Cake3.Ext.UrWeb
 import Cakefile_P (file)
 
-main = writeMake "Makefile" $ do
+instance IsString File where fromString = file
+
+main = writeMake (file "Makefile") $ do
 
   prebuild [cmd|urweb -print-cinclude >/dev/null|]
 

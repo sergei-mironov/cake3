@@ -4,7 +4,11 @@ module Cakefile where
 import Development.Cake3
 import Cakefile_P
 
-main = writeMake "Makefile" $ do
+main = writeMake (file "Makefile") $ do
+
+  prebuild [cmd|@@echo "*****************"|]
+  prebuild [cmd|@@echo "THE CAKE3 EXAMPLE"|]
+  prebuild [cmd|@@echo "*****************"|]
 
   cs <- filterDirectoryContentsRecursive [".c"]
 
@@ -27,3 +31,5 @@ main = writeMake "Makefile" $ do
     depend elf
 
   includeMakefile d
+
+  selfUpdate

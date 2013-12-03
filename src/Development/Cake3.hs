@@ -9,10 +9,8 @@ module Development.Cake3 (
   , Recipe
   , RefInput(..)
   , RefOutput(..)
-  -- , RefMerge(..)
-  -- , Placable(..)
-  , Reference
-  , ReferenceLike(..)
+  , CakeString
+  , string
 
   -- Monads
   , A
@@ -29,11 +27,8 @@ module Development.Cake3 (
   , rule'
   , phony
   , depend
-  , before
   , produce
   , ignoreDepends
-  -- , merge
-  , selfUpdateRule
   , prebuild
   , postbuild
   
@@ -53,18 +48,16 @@ module Development.Cake3 (
   , cmd
   , makevar
   , extvar
-  , makefile
   , CommandGen'(..)
   , make
   , ProjectLocation(..)
   , currentDirLocation
 
-  -- More
+  -- Import several essential modules
+  , module Data.String
   , module Control.Monad
   , module Control.Applicative
   ) where
-
--- import Prelude (id, Char(..), Bool(..), Maybe(..), Either(..), flip, ($), (+), (.), (/=), undefined, error,not)
 
 import Control.Applicative
 import Control.Monad
@@ -79,7 +72,7 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set,member,insert)
-import Data.String as S
+import Data.String
 import Data.Tuple
 import System.IO
 import System.Directory
@@ -108,19 +101,9 @@ file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
   addpoint "." = "."
   addpoint p = "."</>p
 
-selfUpdateRule :: Make Recipe
-selfUpdateRule = do
-  rule $ do
-    shell (CommandGen' (
-      concat <$> sequence [
-        refInput $ (fromFilePath ".") </> "Cakegen"
-      , refInput $ string " > "
-      , refOutput makefile]))
-    get
-
-runMake' :: Make a -> (String -> IO b) -> IO b
-runMake' mk output = do
-  ms <- evalMake mk
+runMake' :: File -> Make a -> (String -> IO b) -> IO b
+runMake' makefile mk output = do
+  ms <- evalMake makefile mk
   when (not $ L.null (warnings ms)) $ do
     hPutStr stderr (warnings ms)
   when (not $ L.null (errors ms)) $ do
@@ -129,21 +112,33 @@ runMake' mk output = do
     Left e -> fail e
     Right s -> output s
 
-writeMake :: FilePath -> Make a -> IO ()
-writeMake "-" mk = runMake' mk (hPutStrLn stdout)
-writeMake f mk = runMake' mk (writeFile f)
+-- | Execute the Make monad, build the Makefile, write it to the @mk file. Also
+-- note, that errors (if any) go to the stderr. fail will be executed in such
+-- cases
+writeMake :: File -> Make a -> IO ()
+writeMake f mk = runMake' f mk (writeFile (toFilePath f))
 
+-- | A General Make runner. Executes the monad, returns the Makefile as a
+-- String. Errors go to stdout. fail is possible.
 runMake :: Make a -> IO String
-runMake mk = runMake' mk return
+runMake mk = runMake' defaultMakefile mk return
 
+-- | Execute Make action, place the recipe above all other recipes (it will be
+-- higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
 withPlacement mk = do
   (r,a) <- mk
   liftMake $ do
-    --p <- getPlacementPos
     addPlacement 0 (S.findMin (rtgt r))
     return (r,a)
 
+-- | Mark the rule's targets as PHONY (Makefile specific)
+phony :: String -> A ()
+phony name = do
+  produce (W.fromFilePath name :: File)
+  markPhony
+
+-- | Build a Recipe using recipe builder @act. Don't change recipe's priority.
 rule2 :: (MonadMake m) => A a -> m (Recipe,a)
 rule2 act = liftMake $ do
   loc <- getLoc
@@ -151,18 +146,12 @@ rule2 act = liftMake $ do
   addRecipe r
   return (r,a)
 
-phony :: String -> A ()
-phony name = do
-  produce (W.fromFilePath name :: File)
-  markPhony
-
+-- | Version of rule2 which places it's recipe above all other recipies.
 rule :: A a -> Make a
 rule act = snd <$> withPlacement (rule2 act)
 
+-- | Version of rule2, without Make monad set explicitly
 rule' :: (MonadMake m) => A a -> m a
 rule' act = liftMake $ snd <$> withPlacement (rule2 act)
-
-before :: Make Recipe -> A ()
-before mx =  liftMake mx >>= refInput >> return ()
 
 

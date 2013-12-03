@@ -1,6 +1,6 @@
 {-# LANGUAGE QuasiQuotes, OverloadedStrings, ScopedTypeVariables #-}
 
-module CakeLib where
+module CakeLib(os) where
 
 import Development.Cake3
 import CakeLib_P
@@ -12,7 +12,7 @@ os (var::Variable) = do
 
 defaultFlags = makevar "CFLAGS" ""
 
-main = writeMake "Makefile" $ do
+main = writeMake (file "Makefile") $ do
   fs <- os defaultFlags
 
   rule $ do

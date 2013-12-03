@@ -2,7 +2,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Development.Cake3.Writer (buildMake, makefile) where
+module Development.Cake3.Writer (defaultMakefile,buildMake) where
 
 import Control.Applicative
 import Control.Monad (when)
@@ -167,11 +167,12 @@ completeMultiTarget rs =
           True -> r { rsrc = (rsrc r) `S.union` mulpack }
           False -> r) r badlist
 
-makefile :: File
-makefile = fromFilePath "Makefile"
+-- | Rule referring to the 
+defaultMakefile :: File
+defaultMakefile = fromFilePath ("." </> "Makefile")
 
-addRebuildDeps :: Set File -> Set Recipe -> Set Recipe
-addRebuildDeps deps rs = S.map mkd rs where
+addRebuildDeps :: File -> Set File -> Set Recipe -> Set Recipe
+addRebuildDeps makefile deps rs = S.map mkd rs where
   mkd r | makefile `S.member` (rtgt r) = addPrerequisites deps r
         | otherwise = r
 
@@ -184,8 +185,8 @@ isRequiredFor rs r f = if f`S.member`(rtgt r) then True else godeeper where
 -- that Makefile depends on. Case-2 is known in advance (for example, when the
 -- the contents of a file is required to build a Makefile then Makefile depends
 -- on this file). This function adds the case-1 dependencies.
-addMakeDeps :: Set Recipe -> Set Recipe
-addMakeDeps rs
+addMakeDeps :: File -> Set Recipe -> Set Recipe
+addMakeDeps makefile rs
   | S.null (S.filter (\r -> makefile `S.member` (rtgt r)) rs) = rs
   | otherwise = S.map addMakeDeps_ rs
   where
@@ -194,7 +195,8 @@ addMakeDeps rs
 
 
 
--- | Renders the (Right Makefile)
+-- | Render the Makefile. Return either the content (Right), or error messages
+-- (Left).
 buildMake :: MakeState -> Either String String
 buildMake ms = do
 
@@ -238,8 +240,8 @@ buildMake ms = do
     rs' = applyPlacement (placement ms)
         $ fixMultiTarget
         $ completeMultiTarget
-        $ addMakeDeps
-        $ addRebuildDeps (makeDeps ms)
+        $ addMakeDeps (outputFile ms)
+        $ addRebuildDeps (outputFile ms) (makeDeps ms)
         $ recipes ms
 
 data MakeRegion = MR {

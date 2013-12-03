@@ -1,5 +1,6 @@
 {-# LANGUAGE ExistentialQuantification, TemplateHaskell, QuasiQuotes, OverloadedStrings, FlexibleInstances, UndecidableInstances, IncoherentInstances #-}
 
+-- | QuasyString-like module. Tweaked for the cake3
 module Text.QuasiMake (Chunk (..), getChunks) where
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Syntax
@@ -17,10 +18,12 @@ import Control.Applicative
 instance Lift Text where
     lift = litE . stringL . T.unpack
 
+-- | Chunk is a part of quasy-quotation
 data Chunk 
-    = T Text -- ^ text
-    | E Char Text -- ^ expression
-    -- | V Text -- ^ value
+    = T Text
+    -- ^ the text
+    | E Char Text
+    -- ^ \$(expr) or \@(expr)
   deriving (Show, Eq)
 
 class Textish a where
@@ -38,29 +41,12 @@ instance Show a => Textish a where
     {-# INLINE toText #-}
     toText x = T.pack (show x)
 
--- | A simple 'QuasiQuoter' to interpolate 'Text' into other pieces of 'Text'. 
--- Expressions can be embedded using $(expr), and values can be interpolated 
--- with $name. Inside $( )s, if you have a string of ambiguous type, it will 
--- default to the Show instance for toText, which will escape unicode 
--- characters in the string, and add quotes around them.
 
--- embed :: QuasiQuoter
--- embed = QuasiQuoter
---     { quoteExp = \s -> 
---         let chunks = flip map (getChunks (T.pack s)) $ \c ->
---                     case c of
---                         T t -> [| t |]
-
---                         E t -> case parseExp (T.unpack t) of
---                             Left  e -> error e
---                             Right e -> appE [| toText |] (return e)
-
---                         V t -> appE [| toText |] (global (mkName (T.unpack t)))
-
---         in appE [| T.concat |] (listE chunks)
---     }
-
--- | Create 'Chunk's without any TH.
+-- | A simple 'QuasiQuoter' to interpolate 'Text' into other pieces of 'Text'.
+-- Expressions can be embedded using \$(expr) or \@(expr), and values can be
+-- interpolated with $name. Inside \$( )s, if you have a string of ambiguous
+-- type, it will default to the Show instance for toText, which will escape
+-- unicode characters in the string, and add quotes around them.
 getChunks :: Text -> [Chunk]
 getChunks i = case parseOnly parser (T.strip i) of
         Right m -> m

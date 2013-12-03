@@ -38,7 +38,7 @@ haskell module
 >   shell [cmd| echo CFLAGS is $cflags |]
 >   shell [cmd| gcc $cflags -o @(file "main.elf") $os |]
 
-> main = writeMake "Makefile" $ do
+> main = writeMake (file "Makefile") $ do
 >   rule $ do
 >     phony "clean"
 >     unsafeShell [cmd| rm $elf ; rm $os |]
