@@ -234,12 +234,13 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
 #### Make syntax
 
   * Make is not able to detect directory content chages. For example, user has
-    to re-run ./Cakegen if they add/delete a source file. This is on my TODO list.
-  * ifdef/endif instructions are not supported generally. User has to move this
-    logic in Haskell for now. Also on TODO list
-  * Make funcitions, wildcards and other variable-related things are not
-    checked.  It is user's responsibility to keep things safe.
-  * Variables as targets are not supported. Implement this logic in Haskell for
+    to rerun the ./Cakegen if they add/remove a source file. I plan to automate
+    this kind of checks. so it is on my TODO list.
+  * ifdef/endif instructions is not supported generally. User has to move this
+    logic in Haskell for now. Also on my TODO list
+  * Cake3 doesn't check the contents of Makefile variables. It is user's
+    responsibility to keep them safe.
+  * Variables as targets is not supported. Implement this logic in Haskell for
     now.
 
 #### General
@@ -267,5 +268,10 @@ Random implementation details
      important is _files_ function which translates relative _filename_ into
      _"." </> path_to_subproject </> filename_.
 
-  3. Cake3 uses relative paths only for the final Makefile
+  3. Cake3 uses relative paths only for the final Makefile.
+
+  4. Cake3 uses it's own representation of files (File). Many filepath functions
+     (takeDirectory, takeBaseName, dropExtensions, </>, etc) are defined for
+     them. See System.FilePath.Wrapper.hs. FileLike typeclass makes it possible
+     to use them with plain FilePath as well.
 
