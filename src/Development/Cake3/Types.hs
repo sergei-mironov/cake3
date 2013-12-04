@@ -25,7 +25,7 @@ data Variable = Variable {
   -- environment)
   } deriving(Show, Eq, Ord, Data, Typeable)
 
-type Vars = Map String (Set Variable)
+-- type Vars = Map String (Set Variable)
 
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
@@ -112,15 +112,21 @@ queryVariablesE rs = check where
 queryTargets :: (Foldable t) => t Recipe -> Set File
 queryTargets rs = foldl' (\a r -> a`mappend`(rtgt r)) mempty rs
 
-
 var :: String -> Maybe String -> Variable
 var n v = Variable n v
 
-makevar :: String -> String -> Variable
+-- | Declare the variable which is defined in the current Makefile and has it's
+-- default value
+makevar
+  :: String -- ^ Variable name
+  -> String -- ^ Default value
+  -> Variable
 makevar n v = var n (Just v)
 
+-- | Declare the variable which is not defined in the target Makefile
 extvar :: String -> Variable
 extvar n = var n Nothing
 
+-- | Special variable @$(MAKE)@
 make = extvar "MAKE"
 

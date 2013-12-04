@@ -101,7 +101,11 @@ file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
   addpoint "." = "."
   addpoint p = "."</>p
 
-runMake' :: File -> Make a -> (String -> IO b) -> IO b
+runMake'
+  :: File -- ^ Output file
+  -> Make a  -- ^ Make builder
+  -> (String -> IO b) -- ^ Handler to output the file
+  -> IO b
 runMake' makefile mk output = do
   ms <- evalMake makefile mk
   when (not $ L.null (warnings ms)) $ do
@@ -112,10 +116,13 @@ runMake' makefile mk output = do
     Left e -> fail e
     Right s -> output s
 
--- | Execute the Make monad, build the Makefile, write it to the @mk file. Also
+-- | Execute the Make monad, build the Makefile, write it to the output file. Also
 -- note, that errors (if any) go to the stderr. fail will be executed in such
 -- cases
-writeMake :: File -> Make a -> IO ()
+writeMake
+  :: File -- ^ Output file
+  -> Make a -- ^ Makefile builder
+  -> IO ()
 writeMake f mk = runMake' f mk (writeFile (toFilePath f))
 
 -- | A General Make runner. Executes the monad, returns the Makefile as a
@@ -132,7 +139,12 @@ withPlacement mk = do
     addPlacement 0 (S.findMin (rtgt r))
     return (r,a)
 
--- | Mark the rule's targets as PHONY (Makefile specific)
+-- | Adds the phony target for a rule. Typical usage:
+-- 
+-- > rule $ do
+-- >  phony "clean"
+-- >  unsafeShell [cmd|rm $elf $os $d|]
+-- >
 phony :: String -> A ()
 phony name = do
   produce (W.fromFilePath name :: File)
@@ -147,7 +159,16 @@ rule2 act = liftMake $ do
   return (r,a)
 
 -- | Version of rule2 which places it's recipe above all other recipies.
-rule :: A a -> Make a
+--
+-- > let c = file "main.c"
+--
+-- Declare a rule to build "main.o" out of "main.c" and "CFLAGS" variable
+--
+-- > rule $ shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
+--
+rule
+  :: A a    -- ^ Rule builder
+  -> Make a
 rule act = snd <$> withPlacement (rule2 act)
 
 -- | Version of rule2, without Make monad set explicitly

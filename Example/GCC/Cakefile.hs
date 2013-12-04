@@ -1,4 +1,3 @@
-{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Cakefile where
 
 import Development.Cake3

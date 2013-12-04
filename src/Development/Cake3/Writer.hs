@@ -89,12 +89,12 @@ applySubprojects sp rs = runMakeLL "subproject" (transformRecipesM_ f rs) where
           n2 <- fresh
           r1 <- ruleLL $ do
             produce n2
-            addCommands scmds
+            commands scmds
             markPhony
           r2 <- ruleLL $ do
             produce n1
             depend (rsrc r)
-            addCommands (rcmd r)
+            commands (rcmd r)
           ruleLL $ do
             produce (rtgt r)
             depend r1

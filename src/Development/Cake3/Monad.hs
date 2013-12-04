@@ -94,10 +94,6 @@ postbuild cmdg = liftMake $ do
   pb <- fst <$> runA' (postbuilds s) (shell cmdg)
   put s { postbuilds = pb }
 
--- State that subproject p (a directory with it's own Makefile) manages file f
--- addSubproject :: File -> [Command] -> Make ()
--- addSubproject f cmds = modify (\ms -> ms { subprojects = M.insert f cmds (subprojects ms) })
-
 -- | Find recipes without targets
 checkForEmptyTarget :: (Foldable f) => f Recipe -> String
 checkForEmptyTarget rs = foldl' checker mempty rs where
@@ -150,6 +146,7 @@ addRecipe r = modify $ \ms ->
 getLoc :: Make String
 getLoc = sloc <$> get
 
+-- | Add 'include ...' directive to the final Makefile for each input file.
 includeMakefile :: (Foldable t) => t File -> Make ()
 includeMakefile fs = foldl' scan (return ()) fs where
   scan a f = do
@@ -160,12 +157,14 @@ instance (Monad m) => MonadLoc (Make' m) where
   withLoc l' (Make um) = Make $ do
     modifyLoc (\l -> l') >> um
 
--- | A here stands for Action. It is a State monad carrying a Recipe under
--- construction. It is the recipe builder, i.e. it provides the way of tweaking
--- it's recipe.
+-- | 'A' here stands for Action. It is a State monad carrying a Recipe as its
+-- state.  Various monadic actions add targets, prerequisites and shell commands
+-- to this recipe. After that, @rule@ function records it to the @MakeState@.
+-- After the recording, no modification is allowed for this recipe.
 newtype A' m a = A' { unA' :: StateT Recipe m a }
   deriving(Monad, Functor, Applicative, MonadState Recipe, MonadIO,MonadFix)
 
+-- | Verison of Action monad with fixed parents
 type A a = A' (Make' IO) a
 
 -- | A class of monads providing access to the underlying A monad
@@ -182,16 +181,15 @@ runA' r act = do
   return (r,a)
 
 -- | Create new empty recipe and run action on it.
-runA :: (Monad m) => String -> A' m a -> m (Recipe, a)
+runA :: (Monad m)
+  => String -- ^ Location string (in the Cakefile.hs)
+  -> A' m a -- ^ Recipe builder
+  -> m (Recipe, a)
 runA loc act = runA' (emptyRecipe loc) act
 
 -- | Version of runA discarding the result of A's computation
 runA_ :: (Monad m) => String -> A' m a -> m Recipe
 runA_ loc act = runA loc act >>= return .fst
-
--- | Add a variable to the Recipe under construction
-addVariable :: (Monad m) => Variable -> A' m ()
-addVariable v = modify $ \r -> r { rvars = S.insert v (rvars r) }
 
 -- | Get a list of targets added so far
 targets :: (Applicative m, Monad m) => A' m (Set File)
@@ -213,7 +211,9 @@ markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) 
 
 -- | Obtain the contents of a File. Note, that this generally means, that
 -- Makefile should be regenerated each time the File is changed.
-readFileForMake :: (MonadMake m) => File -> m BS.ByteString
+readFileForMake :: (MonadMake m)
+  => File -- ^ File to read contents of
+  -> m BS.ByteString
 readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (toFilePath f)))
 
 -- | CommandGen is a recipe-builder packed in the newtype to prevent partial
@@ -225,11 +225,7 @@ type CommandGen = CommandGen' (Make' IO)
 commandGen :: A Command -> CommandGen
 commandGen mcmd = CommandGen' mcmd
 
--- | Add some commanfs to the recipe under construction
-addCommands :: (Monad m) => [Command] -> A' m ()
-addCommands lines = modify (\r -> r { rcmd = (rcmd r) ++ lines })
-
--- | Ignore the depends of a recipe builder
+-- | Modifie the recipe builder: ignore all the dependencies
 ignoreDepends :: (Monad m) => A' m a -> A' m a
 ignoreDepends action = do
   r <- get
@@ -237,30 +233,35 @@ ignoreDepends action = do
   modify $ \r' -> r' { rsrc = rsrc r, rvars = rvars r }
   return a
 
--- | Apply the recipe builder to the current recipe state.
-shell :: (Monad m) => CommandGen' m -> A' m [File]
+-- | Apply the recipe builder to the current recipe state. Return the list of
+-- targets of the current @Recipe@ under construction
+shell :: (Monad m)
+  => CommandGen' m -- ^ Command builder as returned by cmd quasi-quoter
+  -> A' m [File]
 shell cmdg = do
   line <- unCommand cmdg
-  addCommands [line]
+  commands [line]
   r <- get
   return (S.toList (rtgt r))
 
--- | Apply the recipe builder to the current recipe state, but don't count it's
--- dependencies
+-- | Version of @shell@ which doesn't track it's dependencies
 unsafeShell :: (Monad m) => CommandGen' m -> A' m [File]
 unsafeShell cmdg = ignoreDepends (shell cmdg)
 
--- | It is quite dangerous to refer to strings from inside quasy-quoters so here
--- is the wrapper. RefInput instance is defined for it.
+-- | Simple wrapper for strings, a target for various typeclass instances.
 newtype CakeString = CakeString String
   deriving(Show,Eq,Ord)
 
+-- | An alias to CakeString constructor
 string :: String -> CakeString
 string = CakeString
 
--- | Class of things which may be referenced using '\@(expr)' from inside
--- quasy-quoted shell expressions
+-- | Class of things which may be referenced using '\@(expr)' syntax of the
+-- quasi-quoted shell expressions.
 class (Monad m) => RefOutput m x where
+  -- | Register the output item, return it's shell-command representation. Files
+  -- are rendered using space protection quotation, variables are wrapped into
+  -- $(VAR) syntax, item lists are converted into space-separated lists.
   refOutput :: x -> A' m Command
 
 instance (Monad m) => RefOutput m File where
@@ -290,6 +291,7 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
 -- | Class of things which may be referenced using '\$(expr)' from inside
 -- of quasy-quoted shell expressions
 class (MonadAction a m) => RefInput a m x where
+  -- | Register the input item, return it's shell-script representation
   refInput :: x -> a Command
 
 instance (MonadAction a m) => RefInput a m File where
@@ -322,7 +324,7 @@ instance (RefInput a m x) => RefInput a m (Maybe x) where
 
 instance (MonadAction a m) => RefInput a m Variable where
   refInput v@(Variable n _) = liftAction $ do
-    addVariable v
+    variables [v]
     return_text $ printf "$(%s)" n
 
 instance (MonadAction a m) => RefInput a m CakeString where
@@ -331,19 +333,24 @@ instance (MonadAction a m) => RefInput a m CakeString where
 
 -- | Add it's argument to the list of dependencies (prerequsites) of a current
 -- recipe under construction
-depend :: (RefInput a m x) => x -> a ()
+depend :: (RefInput a m x)
+  => x -- ^ File or [File] or (Set File) or other form of dependency.
+  -> a ()
 depend x = refInput x >> return ()
 
--- | Add it's argument to the list of targets of a current recipe under
--- construction
-produce :: (RefOutput m x) => x -> A' m ()
+-- | Declare that current recipe produces some producable item.
+produce :: (RefOutput m x)
+  => x -- ^ File or [File] or other form of target.
+  -> A' m ()
 produce x = refOutput x >> return ()
 
--- | Add it's argument to the list of variables referenced by the current recipe
-variables :: (Monad m) => (Set Variable) -> A' m ()
-variables vs = modify (\r -> r { rvars = (rvars r) `mappend` vs } )
+-- | Add variables to the list of variables referenced by the current recipe
+variables :: (Foldable t, Monad m)
+  => (t Variable) -- ^ A set of variables to depend the recipe on
+  -> A' m ()
+variables vs = modify (\r -> r { rvars = foldl' (\a v -> S.insert v a) (rvars r) vs } )
 
--- | Add it's argument to the list of commands of a current recipe under
+-- | Add commands to the list of commands of a current recipe under
 -- construction. Warning: this function behaves like unsafeShell i.e. it doesn't
 -- analyze the command text
 commands :: (Monad m) => [Command] -> A' m ()
@@ -357,19 +364,30 @@ location l  = modify (\r -> r { rloc = l } )
 flags :: (Monad m) => Set Flag -> A' m ()
 flags f = modify (\r -> r { rflags = (rflags r) `mappend` f } )
 
--- | Has effect of a function :: QQ -> CommandGen where QQ is a string supporting
--- $VARs. Each $VAR will be dereferenced using Ref typeclass. Result will
--- be equivalent to
+-- | Has effect of a function @QQ -> CommandGen@ where QQ is a string supporting
+-- the following syntax:
 --
---    return Command $ do
---      s1 <- refInput "gcc "
---      s2 <- refInput (flags :: Variable)
---      s3 <- refInput " "
---      s4 <- refInput (file :: File)
---      return (s1 ++ s2 ++ s3)
+-- * $(expr) evaluates to expr and adds it to the list of dependencies (prerequsites)
+--
+-- * \@(expr) evaluates to expr and adds it to the list of targets
+--
+-- * $$ and \@\@ evaluates to $ and \@
+--
+-- /Example/
+--
+-- > [cmd|gcc $flags -o @file|]
+--
+-- is equivalent to
+--
+-- >   return $ CommandGen $ do
+-- >     s1 <- refInput "gcc "
+-- >     s2 <- refInput (flags :: Variable)
+-- >     s3 <- refInput " -o "
+-- >     s4 <- refOutput (file :: File)
+-- >     return (s1 ++ s2 ++ s3 ++ s4)
 --
 -- Later, this command may be examined or passed to the shell function to apply
--- it to the recepi
+-- it to the recipe
 --
 cmd :: QuasiQuoter
 cmd = QuasiQuoter

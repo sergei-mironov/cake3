@@ -17,8 +17,10 @@ import Text.Printf
 newtype FileT a = FileT a
   deriving(Show,Eq,Ord,Data,Typeable)
 
+-- | Simple wrapper for FilePath.
 type File = FileT FilePath
 
+-- | Convert File back to FilePath
 toFilePath :: (FileT FilePath) -> FilePath
 toFilePath (FileT f) = f
 
@@ -41,9 +43,11 @@ class FileLike a where
   takeExtensions :: a -> String
   dropExtensions :: a -> a
 
+-- | Redefine standard @</>@ operator to work with Files
 (</>) :: (FileLike a) => a -> String -> a
 (</>) = combine
 
+-- | Alias for replaceExtension
 (.=) :: (FileLike a) => a -> String -> a
 (.=) = replaceExtension
 
