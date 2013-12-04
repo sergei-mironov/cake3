@@ -2,11 +2,11 @@ module Cakefile where
 
 import Development.Cake3
 import Development.Cake3.Ext.UrWeb
-import Cakefile_P (file)
+import Cakefile_P
 
 instance IsString File where fromString = file
 
-main = writeMake (file "Makefile") $ do
+project = do
 
   prebuild [cmd|urweb -print-cinclude >/dev/null|]
 
@@ -33,3 +33,8 @@ main = writeMake (file "Makefile") $ do
     depend t2
 
   return ()
+
+main = do
+  writeMake (file "Makefile") (project)
+  writeMake (file "Makefile.devel") (selfUpdate >> project)
+
