@@ -216,7 +216,7 @@ buildMake ms = do
     r <- runA_ "<internal>" $ do
       produce (queryTargets (recipes ms))
       commands (rcmd $ prebuilds ms)
-      commands [[CmdStr "$(MAKE) MAIN=1 $(MAKECMDGOALS)"]]
+      unsafeShell [cmd|$(make) -f $(outputFile ms) MAIN=1 $(extvar "MAKECMDGOALS")|]
       commands (rcmd $ postbuilds ms)
       variables (rvars $ prebuilds ms)
       variables (rvars $ postbuilds ms)
