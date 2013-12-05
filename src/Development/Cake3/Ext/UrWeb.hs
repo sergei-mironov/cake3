@@ -54,7 +54,7 @@ data UrpHdrToken = UrpDatabase String
                  | UrpInclude File
                  | UrpLink File
                  | UrpFFI File
-                 | UrpJSFunc String String
+                 | UrpJSFunc String String String -- ^ Module name, UrWeb name, JavaScript name
                  | UrpSafeGet String
   deriving(Show,Data,Typeable)
 
@@ -146,6 +146,8 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
   toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
+  toUrpLine up (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
+  toUrpLine up e = error $ "toUrpLine: unhandled case " ++ (show e)
 
 instance ToUrpLine UrpModToken where
   toUrpLine up (UrpModule1 f) = up </> toFilePath (dropExtensions f)
@@ -245,8 +247,9 @@ standalone f = UrpLibStandalone f
 internal u = UrpLibInternal u
 embed e = UrpLibEmbed e
 
-module_ :: (MonadMake m) => UrpModToken -> UrpGen m ()
+ur, module_ :: (MonadMake m) => UrpModToken -> UrpGen m ()
 module_ = addMod
+ur = addMod
 
 pair f = UrpModule2 (f.="ur") (f.="urs")
 single f = UrpModule1 f
@@ -267,7 +270,7 @@ ffi s = addHdr $ UrpFFI s
 sql :: (MonadMake m) => File -> UrpGen m ()
 sql f = addHdr $ UrpSql f
   
-jsFunc n s = addHdr $ UrpJSFunc n s
+jsFunc m u j = addHdr $ UrpJSFunc m u j
 
 safeGet s = addHdr $ UrpSafeGet s
 
@@ -282,9 +285,9 @@ guessMime inf = fixup $ BS.unpack (defaultMimeLookup (fromString inf)) where
   fixup m = m
 
 data JSFunc = JSFunc {
-    urdecl :: String
-  , urname :: String
-  , jsname :: String
+    urdecl :: String -- ^ URS declaration for this function
+  , urname :: String -- ^ UrWeb name of this function
+  , jsname :: String -- ^ JavaScript name of this function
   } deriving(Show)
 
 data JSType = JSType {
@@ -467,7 +470,7 @@ bin' dir src_name src_contents = do
     line $ "val geturl = url(blobpage {})"
 
   forM_ jsdecls $ \decl -> do
-    jsFunc (printf "%s.%s = %s" (modname jsmod) (urname decl)) (jsname decl)
+    addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
   ffi (jsmod ".urs")
 
   safeGet $ printf "%s/blobpage" (modname wrapmod)
