@@ -213,6 +213,7 @@ uwapp opts urpfile m = do
     case urpSql' u of
       Nothing -> return ()
       Just sql -> produce sql
+    depend (makevar "URVERSION" "$(shell urweb -version)")
     unsafeShell [cmd|urweb $(string opts) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
   return $ UWExe u
 

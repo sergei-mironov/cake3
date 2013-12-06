@@ -130,8 +130,7 @@ writeMake f mk = runMake' f mk (writeFile (toFilePath f))
 runMake :: Make a -> IO String
 runMake mk = runMake' defaultMakefile mk return
 
--- | Execute Make action, place the recipe above all other recipes (it will be
--- higher in the final Makefile)
+-- | Raise the recipe's priority (it will appear higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
 withPlacement mk = do
   (r,a) <- mk
@@ -145,33 +144,42 @@ withPlacement mk = do
 -- >  phony "clean"
 -- >  unsafeShell [cmd|rm $elf $os $d|]
 -- >
-phony :: String -> A ()
+phony ::
+  String -- ^ A name of phony target
+  -> A ()
 phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
--- | Build a Recipe using recipe builder @act. Don't change recipe's priority.
-rule2 :: (MonadMake m) => A a -> m (Recipe,a)
+-- | Build a Recipe using recipe builder provided, than record the Recipe to the
+-- MakeState. Return the copy of Recipe (which should not be changed in future)
+-- and the result of recipe builder. The typical recipe builder result is the
+-- list of it's targets.
+--
+-- /Example/
+-- Lets declare a rule which builds "main.o" out of "main.c" and "CFLAGS"
+-- variable
+--
+-- > let c = file "main.c"
+-- > rule $ shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
+--
+rule2 :: (MonadMake m)
+  => A a -- ^ Recipe builder
+  -> m (Recipe,a) -- ^ The recipe itself and the recipe builder's result
 rule2 act = liftMake $ do
   loc <- getLoc
   (r,a) <- runA loc act
   addRecipe r
   return (r,a)
 
--- | Version of rule2 which places it's recipe above all other recipies.
---
--- > let c = file "main.c"
---
--- Declare a rule to build "main.o" out of "main.c" and "CFLAGS" variable
---
--- > rule $ shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
---
+-- | A version of rule2. Rule places it's recipe above all recipies defined so
+-- far.
 rule
-  :: A a    -- ^ Rule builder
+  :: A a    -- ^ Recipe builder
   -> Make a
 rule act = snd <$> withPlacement (rule2 act)
 
--- | Version of rule2, without Make monad set explicitly
+-- | A version of rule, without monad set explicitly
 rule' :: (MonadMake m) => A a -> m a
 rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
