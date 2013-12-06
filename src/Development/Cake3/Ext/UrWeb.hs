@@ -83,6 +83,18 @@ instance (MonadAction a m) => RefInput a m UWLib where
 instance (MonadAction a m) => RefInput a m UWExe where
   refInput (UWExe u) = refInput (urpExe u)
  
+class UrpLike x where
+  toUrp :: x -> Urp
+  tempfiles :: x -> [File]
+  tempfiles = (\x -> urpObjs x ++ maybeToList (urpSql' x) ++ maybeToList (urpExe' x)) . toUrp
+
+instance UrpLike Urp where
+  toUrp = id
+
+instance UrpLike UWLib where
+  toUrp (UWLib x) = x
+instance UrpLike UWExe where
+  toUrp (UWExe x) = x
 
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
@@ -112,6 +124,7 @@ urpLibs (Urp _ _ hdr _) = foldl' scan [] hdr where
   scan a (UrpLibrary f) = f:a
   scan a _ = a
 
+urpExe' = uexe
 urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
