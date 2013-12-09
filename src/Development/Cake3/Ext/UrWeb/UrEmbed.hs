@@ -107,7 +107,8 @@ main_ (A tgturp False drm ins) = do
   let file = file' loc
   let bin = bin' (file ".")
 
-  s <- runMake $ do
+  let mk = (("." </> takeFileName tgturp) .= "mk")
+  writeMake (file mk) $ do
     let urp = file (takeFileName tgturp)
     u <- uwlib urp $ do
       forM_ (ins`zip`cntnts) $ \(i,c) -> do
@@ -116,9 +117,6 @@ main_ (A tgturp False drm ins) = do
       phony "all"
       depend u
   
-  let mk = (("." </> takeFileName tgturp) .= "mk")
-  writeFile mk s
-
   when (drm == False) $ do
     system $ printf "make -f %s" mk
     return ()

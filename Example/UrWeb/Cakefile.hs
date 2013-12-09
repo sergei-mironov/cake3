@@ -18,12 +18,12 @@ project = do
   t1 <- uwapp "-dbms sqlite" "Test1.urp" $ do
     allow url "http://code.jquery.com/ui/1.10.3/jquery-ui.js";
     allow mime "text/javascript";
-    library (internal u);
+    library u;
     debug
     module_ (single "Test1.ur")
 
   t2 <- uwapp "-dbms sqlite" "Test2.urp" $ do
-    library (internal u);
+    library u;
     module_ (single "Test2.ur")
 
   rule $ do

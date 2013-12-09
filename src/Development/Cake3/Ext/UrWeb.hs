@@ -153,7 +153,7 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpSql f) = printf "sql %s" (up </> toFilePath f)
   toUrpLine up (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
   toUrpLine up (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
-  toUrpLine up (UrpLibrary f) = printf "library %s" (up </> toFilePath (dropExtensions f))
+  toUrpLine up (UrpLibrary f) = printf "library %s" (up </> toFilePath (dropExtension f))
   toUrpLine up (UrpDebug) = printf "debug"
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
   toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
@@ -234,32 +234,53 @@ rewrite a s = addHdr $ UrpRewrite a s
 urpUp :: File -> FilePath
 urpUp f = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory $ toFilePath f
 
-newtype UrEmbed = Urembed File
-  deriving (Show)
+-- | Dir name , file to embed
+-- data UrEmbed = Urembed File File
+--   deriving (Show)
 
-data UrpLibReference
-  = UrpLibStandalone File 
-  | UrpLibInternal UWLib
-  | UrpLibEmbed UrEmbed
-  deriving(Show)
+-- data UrpLibReference
+--   = UrpLibStandaloneMake File 
+--   | UrpLibStandaloneMake2 File 
+--   | UrpLibInternal UWLib
+--   | UrpLibEmbed File File
+--   deriving(Show)
 
-library' :: (MonadMake m) => File -> UrpGen m ()
-library' l = do
-  when ((takeExtension l) /= ".urp") $ do
-    fail "library declaration for %s should ends with '.urp'" (toFilePath l)
-  addHdr $ UrpLibrary l
+-- | A general method of including a library into the UrWeb project.
+library' :: (MonadMake m)
+  => Make [File] -- ^ A monadic action, returning a list of libraries to include
+  -> UrpGen m ()
+library' ml = do
+  ls <- liftMake ml
+  forM_ ls $ \l -> do
+    when ((takeExtension l) /= ".urp") $ do
+      fail $ printf "library declaration for %s should ends with '.urp'" (toFilePath l)
+    addHdr $ UrpLibrary l
 
-library :: (MonadMake m) => UrpLibReference -> UrpGen m ()
-library (UrpLibStandalone l) = do
-  library' l
-  when ((toFilePath $ takeDirectory l) /= ".") $ do
-    prebuild [cmd| $(make) -C $(takeDirectory l) |]
-library (UrpLibInternal (UWLib u)) = library' (urp u)
-library (UrpLibEmbed ue) = error "urembed is not defined"
+-- | Include a library defined somewhere in the current project
+library :: (MonadMake m) => UWLib -> UrpGen m ()
+library (UWLib u) = library' $ do
+  return [urp u]
 
-standalone f = UrpLibStandalone f
-internal u = UrpLibInternal u
-embed e = UrpLibEmbed e
+-- | Build a file using external Makefile facility.
+externalMake' ::
+     File -- ^ External Makefile
+  -> File -- ^ External file to refer to
+  -> Make [File]
+externalMake' mk f = do
+  prebuild [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk)|]
+  return [f]
+
+-- | Build a file from external project. It is expected, that this project has a
+-- 'Makwfile' in it's root directory
+externalMake ::
+     File -- ^ File from the external project to build
+  -> Make [File]
+externalMake f = externalMake' (takeDirectory f </> "Makefile") f
+
+-- | Build a file from external project. It is expected, that this project has a
+-- fiel.mk (a Makefile with an unusual name) in it's root directory
+externalMake2 :: File -> Make [File]
+externalMake2 f = externalMake' ((takeDirectory f </> takeFileName f) .= "mk") f
 
 ur, module_ :: (MonadMake m) => UrpModToken -> UrpGen m ()
 module_ = addMod
