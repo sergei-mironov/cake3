@@ -153,7 +153,9 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpSql f) = printf "sql %s" (up </> toFilePath f)
   toUrpLine up (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
   toUrpLine up (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
-  toUrpLine up (UrpLibrary f) = printf "library %s" (up </> toFilePath (dropExtension f))
+  toUrpLine up (UrpLibrary f)
+    | (takeFileName f) == "lib.urp" = printf "library %s" (up </> toFilePath (takeDirectory f))
+    | otherwise = printf "library %s" (up </> toFilePath (dropExtension f))
   toUrpLine up (UrpDebug) = printf "debug"
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
   toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
