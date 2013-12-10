@@ -14,6 +14,7 @@ project = do
     ffi "Script.urs"
     include "Script.h"
     link "Script.o"
+    pkgconfig "jansson"
 
   t1 <- uwapp "-dbms sqlite" "Test1.urp" $ do
     allow url "http://code.jquery.com/ui/1.10.3/jquery-ui.js";

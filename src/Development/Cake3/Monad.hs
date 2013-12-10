@@ -331,6 +331,9 @@ instance (MonadAction a m) => RefInput a m CakeString where
   refInput v@(CakeString s) = do
     return_text s
 
+instance (MonadAction a m) => RefInput a m (CommandGen' m) where
+  refInput (CommandGen' a) = liftAction a
+
 -- | Add it's argument to the list of dependencies (prerequsites) of a current
 -- recipe under construction
 depend :: (RefInput a m x)

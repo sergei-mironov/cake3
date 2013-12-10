@@ -39,10 +39,10 @@ import System.FilePath.Wrapper
 import Development.Cake3.Monad
 import Development.Cake3
 
-data UrpAllow = UrpMime | UrpUrl
+data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader
   deriving(Show,Data,Typeable)
 
-data UrpRewrite = UrpStyle
+data UrpRewrite = UrpStyle | UrpAll
   deriving(Show,Data,Typeable)
 
 data UrpHdrToken = UrpDatabase String
@@ -53,9 +53,11 @@ data UrpHdrToken = UrpDatabase String
                  | UrpDebug
                  | UrpInclude File
                  | UrpLink File
+                 | UrpPkgConfig String
                  | UrpFFI File
                  | UrpJSFunc String String String -- ^ Module name, UrWeb name, JavaScript name
                  | UrpSafeGet String
+                 | UrpScript String
   deriving(Show,Data,Typeable)
 
 data UrpModToken
@@ -129,6 +131,10 @@ urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
 
+urpPkgCfg (Urp _ _ hdr _) = foldl' scan [] hdr where
+  scan a (UrpPkgConfig s) = s:a
+  scan a _ = a
+
 data UrpState = UrpState {
     urpst :: Urp
   } deriving (Show)
@@ -141,12 +147,16 @@ class ToUrpWord a where
 instance ToUrpWord UrpAllow where
   toUrpWord (UrpMime) = "mime"
   toUrpWord (UrpUrl) = "url"
+  toUrpWord (UrpResponseHeader) = "responseHeader"
 
 instance ToUrpWord UrpRewrite where
   toUrpWord (UrpStyle) = "style"
+  toUrpWord (UrpAll) = "all"
 
 class ToUrpLine a where
   toUrpLine :: FilePath -> a -> String
+
+maskPkgCfg s = "%" ++ (map toUpper s) ++ "%"
 
 instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpDatabase dbs) = printf "database %s" dbs
@@ -159,9 +169,11 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpDebug) = printf "debug"
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
   toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
+  toUrpLine up (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
   toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
   toUrpLine up (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
+  toUrpLine up (UrpScript s) = printf "script %s" s
   toUrpLine up e = error $ "toUrpLine: unhandled case " ++ (show e)
 
 instance ToUrpLine UrpModToken where
@@ -172,40 +184,49 @@ instance ToUrpLine UrpModToken where
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
-instance (Monad m) => MonadAction (UrpGen (A' m)) m where
-  liftAction a = UrpGen (lift a)
+-- instance (Monad m) => MonadAction (UrpGen (A' m)) m where
+--   liftAction a = UrpGen (lift a)
 
 toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-uwlib :: File -> UrpGen (A' (Make' IO)) () -> Make UWLib
+uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
-  (_,u) <- rule2 $ do
-    ((),s) <- runStateT (unUrpGen m) (defState urpfile)
-    let u@(Urp _ _ hdr mod) = urpst s
-    let up = urpUp urpfile
+  ((),s) <- runStateT (unUrpGen m) (defState urpfile)
+  let u@(Urp _ _ hdr mod) = urpst s
+  let pkgcfg = (urpPkgCfg u)
 
-    toFile urpfile $ do
-      forM hdr (line . toUrpLine up)
+  inp <- rule' $ do
+    let inp = urpfile .= "urp.in"
+    toFile inp $ do
+      forM hdr (line . toUrpLine (urpUp urpfile))
       line ""
-      forM mod (line . toUrpLine up)
+      forM mod (line . toUrpLine (urpUp urpfile))
 
     forM_ (urpObjs u) $ \o -> do
-      let incl = makevar "URINCL" "$(shell urweb -print-cinclude)"
+      let i = makevar "URINCL" $ concat $
+                "-I$(shell urweb -print-cinclude) " : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
       let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
       rule2 $ do
-        shell [cmd| $cc -c -I $incl -o @o $(o .= "c") |]
+        shell [cmd| $cc -c $i -o @o $(o .= "c") |]
 
     depend (urpDeps u)
     depend (urpLibs u)
-    shell [cmd|touch @urpfile|]
-    return u
+    shell [cmd|touch @inp|]
+
+  rule' $ do
+    let cpy = [cmd|cat $inp|] :: CommandGen' (Make' IO)
+    let l = foldl' (\a p -> do
+                            let l = makevar (map toUpper $ printf "lib%s" p) (printf "$(shell pkg-config --libs %s)" p)
+                            [cmd| $a | sed 's@@$(string $ maskPkgCfg p)@@$l@@'  |]
+                            ) cpy pkgcfg
+    shell [cmd| $l > @urpfile |]
 
   return $ UWLib u
 
-uwapp :: String -> File -> UrpGen (A' (Make' IO)) () -> Make UWExe
+uwapp :: String -> File -> UrpGen (Make' IO) () -> Make UWExe
 uwapp opts urpfile m = do
   (UWLib u') <- uwlib urpfile m
   let u = u' { uexe = Just (urpfile .= "exe") }
@@ -317,9 +338,19 @@ mime = UrpMime
 
 style = UrpStyle
 
+all = UrpAll
+
+responseHeader = UrpResponseHeader
+
+script :: (MonadMake m) => String -> UrpGen m ()
+script s = addHdr $ UrpScript s
+
 guessMime inf = fixup $ BS.unpack (defaultMimeLookup (fromString inf)) where
   fixup "application/javascript" = "text/javascript"
   fixup m = m
+
+pkgconfig :: (MonadMake m) => String -> UrpGen m ()
+pkgconfig l = addHdr $ UrpPkgConfig l
 
 data JSFunc = JSFunc {
     urdecl :: String -- ^ URS declaration for this function
