@@ -52,7 +52,8 @@ data UrpHdrToken = UrpDatabase String
                  | UrpLibrary File
                  | UrpDebug
                  | UrpInclude File
-                 | UrpLink File
+                 | UrpLink File String
+                 | UrpSrc File String String
                  | UrpPkgConfig String
                  | UrpFFI File
                  | UrpJSFunc String String String -- ^ Module name, UrWeb name, JavaScript name
@@ -88,7 +89,7 @@ instance (MonadAction a m) => RefInput a m UWExe where
 class UrpLike x where
   toUrp :: x -> Urp
   tempfiles :: x -> [File]
-  tempfiles = (\x -> urpObjs x ++ maybeToList (urpSql' x) ++ maybeToList (urpExe' x)) . toUrp
+  tempfiles = (\x -> (urpObjs x) ++ maybeToList (urpSql' x) ++ maybeToList (urpExe' x)) . toUrp
 
 instance UrpLike Urp where
   toUrp = id
@@ -100,7 +101,8 @@ instance UrpLike UWExe where
 
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
-  scan1 a (UrpLink f) = f:a
+  scan1 a (UrpLink f _) = f:a
+  scan1 a (UrpSrc f _ _) = (f.="o"):a
   scan1 a (UrpInclude f) = f:a
   scan1 a _ = a
   scan2 a (UrpModule1 f) = f:a
@@ -118,8 +120,13 @@ urpSql u = case urpSql' u of
   Nothing -> error "ur project defines no SQL file"
   Just sql -> sql
 
+urpSrcs (Urp _ _ hdr _) = foldl' scan [] hdr where
+  scan a (UrpSrc f cfl lfl) = (f,cfl):a
+  scan a _ = a
+
 urpObjs (Urp _ _ hdr _) = foldl' scan [] hdr where
-  scan a (UrpLink f) = f:a
+  scan a (UrpSrc f _ lfl) = (f.="o"):a
+  scan a (UrpLink f lfl) = (f):a
   scan a _ = a
 
 urpLibs (Urp _ _ hdr _) = foldl' scan [] hdr where
@@ -168,7 +175,8 @@ instance ToUrpLine UrpHdrToken where
     | otherwise = printf "library %s" (up </> toFilePath (dropExtension f))
   toUrpLine up (UrpDebug) = printf "debug"
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
-  toUrpLine up (UrpLink f) = printf "link %s" (up </> toFilePath f)
+  toUrpLine up (UrpLink f lfl) = printf "link %s %s" lfl (up </> toFilePath f)
+  toUrpLine up (UrpSrc f _ lfl) = printf "link %s %s" lfl (up </> toFilePath (f.="o"))
   toUrpLine up (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
   toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
@@ -205,12 +213,16 @@ uwlib urpfile m = do
       line ""
       forM mod (line . toUrpLine (urpUp urpfile))
 
-    forM_ (urpObjs u) $ \o -> do
-      let i = makevar "URINCL" $ concat $
-                "-I$(shell urweb -print-cinclude) " : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
+    forM_ (urpSrcs u) $ \(c,fl) -> do
+      let flags = concat $ fl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
+      let i = makevar "URINCL" "-I$(shell urweb -print-cinclude) " 
       let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
+      let cpp = makevar "URCPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
       rule2 $ do
-        shell [cmd| $cc -c $i -o @o $(o .= "c") |]
+        case takeExtension c of
+          ".cpp" -> shell [cmd| $cpp -c $i $(string flags) -o @(c .= "o") $(c) |]
+          ".c" -> shell [cmd| $cc -c $i -o $(string flags) @(c .= "o") $(c) |]
+          e -> error ("Unknown C-source extension " ++ e)
 
     depend (urpDeps u)
     depend (urpLibs u)
@@ -319,8 +331,17 @@ debug = addHdr $ UrpDebug
 include :: (MonadMake m) => File -> UrpGen m ()
 include f = addHdr $ UrpInclude f
 
+link' :: (MonadMake m) => File -> String -> UrpGen m ()
+link' f fl = addHdr $ UrpLink f fl
+
 link :: (MonadMake m) => File -> UrpGen m ()
-link f = addHdr $ UrpLink f
+link f = link' f []
+
+csrc'  :: (MonadMake m) => File -> String -> String -> UrpGen m ()
+csrc' f cfl lfl = addHdr $ UrpSrc f cfl lfl
+
+csrc  :: (MonadMake m) => File -> UrpGen m ()
+csrc f = csrc' f [] []
 
 ffi :: (MonadMake m) => File -> UrpGen m ()
 ffi s = addHdr $ UrpFFI s
