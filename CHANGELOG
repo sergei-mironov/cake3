@@ -1,0 +1,11 @@
+Version 0.3
+-----------
+API changes, improve documentation, improve UrWeb extension
+
+Version 0.2
+-----------
+Redesign (simplify) monadic interface, add support for prebuild/postbuild actions.
+
+Version 0.1
+-----------
+Initial release

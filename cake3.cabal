@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                cake3
-version:             0.3.0.0
+version:             0.3.0.1
 synopsis:            Third cake the Makefile EDSL
 description:         Cake3 is a Makefile EDSL written in Haskell. Write your build logic in
                      Haskell, obtain clean and safe Makefile, distribute it to the end-users.
@@ -56,21 +56,13 @@ description:
     .
     See the README on the GitHub <https://github.com/grwlf/cake3> for more
     information. Distribution contains several example projects.
-    .
-    /Changes/
-    .
-    * 0.1 - Initial release
-    .
-    * 0.2 - Redesign (simplify) monadic interface, add support for prebuild/postbuild actions.
-    .
-    * 0.3 - API changes, improve documentation, improve UrWeb extension
-
 
 category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
 data-dir:            src
 data-files:          CakeScript.sh, UrEmbedHelp.txt
+Extra-Source-Files:  README.md, LICENSE, CHANGELOG
 
 library
   exposed-modules:   Development.Cake3
