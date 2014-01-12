@@ -52,7 +52,7 @@ data UrpHdrToken = UrpDatabase String
                  | UrpLibrary File
                  | UrpDebug
                  | UrpInclude File
-                 | UrpLink File String
+                 | UrpLink (Either File String)
                  | UrpSrc File String String
                  | UrpPkgConfig String
                  | UrpFFI File
@@ -101,7 +101,7 @@ instance UrpLike UWExe where
 
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
-  scan1 a (UrpLink f _) = f:a
+  scan1 a (UrpLink (Left f)) = f:a
   scan1 a (UrpSrc f _ _) = (f.="o"):a
   scan1 a (UrpInclude f) = f:a
   scan1 a _ = a
@@ -126,7 +126,7 @@ urpSrcs (Urp _ _ hdr _) = foldl' scan [] hdr where
 
 urpObjs (Urp _ _ hdr _) = foldl' scan [] hdr where
   scan a (UrpSrc f _ lfl) = (f.="o"):a
-  scan a (UrpLink f lfl) = (f):a
+  scan a (UrpLink (Left f)) = (f):a
   scan a _ = a
 
 urpLibs (Urp _ _ hdr _) = foldl' scan [] hdr where
@@ -175,8 +175,9 @@ instance ToUrpLine UrpHdrToken where
     | otherwise = printf "library %s" (up </> toFilePath (dropExtension f))
   toUrpLine up (UrpDebug) = printf "debug"
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
-  toUrpLine up (UrpLink f lfl) = printf "link %s %s" lfl (up </> toFilePath f)
-  toUrpLine up (UrpSrc f _ lfl) = printf "link %s %s" lfl (up </> toFilePath (f.="o"))
+  toUrpLine up (UrpLink (Left f)) = printf "link %s" (up </> toFilePath f)
+  toUrpLine up (UrpLink (Right lfl)) = printf "link %s" lfl
+  toUrpLine up (UrpSrc f _ _) = printf "link %s" (up </> toFilePath (f.="o"))
   toUrpLine up (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
   toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
@@ -221,7 +222,7 @@ uwlib urpfile m = do
       rule2 $ do
         case takeExtension c of
           ".cpp" -> shell [cmd| $cpp -c $i $(string flags) -o @(c .= "o") $(c) |]
-          ".c" -> shell [cmd| $cc -c $i -o $(string flags) @(c .= "o") $(c) |]
+          ".c" -> shell [cmd| $cc -c $i $(string flags) -o @(c .= "o") $(c) |]
           e -> error ("Unknown C-source extension " ++ e)
 
     depend (urpDeps u)
@@ -332,13 +333,19 @@ include :: (MonadMake m) => File -> UrpGen m ()
 include f = addHdr $ UrpInclude f
 
 link' :: (MonadMake m) => File -> String -> UrpGen m ()
-link' f fl = addHdr $ UrpLink f fl
+link' f fl = do
+  addHdr $ UrpLink (Left f)
+  when (fl /= "") $ do
+    addHdr $ UrpLink (Right fl)
 
 link :: (MonadMake m) => File -> UrpGen m ()
 link f = link' f []
 
 csrc'  :: (MonadMake m) => File -> String -> String -> UrpGen m ()
-csrc' f cfl lfl = addHdr $ UrpSrc f cfl lfl
+csrc' f cfl lfl = do
+  addHdr $ UrpSrc f cfl lfl
+  when (lfl /= "") $ do
+    addHdr $ UrpLink (Right lfl)
 
 csrc  :: (MonadMake m) => File -> UrpGen m ()
 csrc f = csrc' f [] []
@@ -523,7 +530,7 @@ bin' dir src_name src_contents = do
     line $ "val text : unit -> transaction string"
 
   include (binmod ".h")
-  link (binmod ".o")
+  csrc (binmod ".c")
   ffi (binmod ".urs")
 
   -- JavaScript FFI Module
