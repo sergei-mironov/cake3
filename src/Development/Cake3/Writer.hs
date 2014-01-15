@@ -213,11 +213,13 @@ buildMake ms = do
     line ""
     line "# Prebuild/postbuild section"
     line ""
+    line "export MAIN=1" 
+    line ""
     r <- runA_ "<internal>" $ do
       produce (queryTargets (recipes ms))
       unsafeShell [cmd|-mkdir .cake3|]
       commands (rcmd $ prebuilds ms)
-      unsafeShell [cmd|$(make) -f $(outputFile ms) MAIN=1 $(makecmdgoals)|]
+      unsafeShell [cmd|$(make) -f $(outputFile ms) $(makecmdgoals)|]
       commands (rcmd $ postbuilds ms)
       markPhony
     writeRules $ applyPlacement (placement ms) $ fixMultiTarget [r]
@@ -264,7 +266,8 @@ writeRegions hdr rs = mappend <$> (pure hdr) <*> (writeRegions' rs) where
     | otherwise = do
       inner <- writeRegions' rs
       runLines $ do
-        line (printf "ifdef %s" (map toUpper $ mrname r))
+        line (printf "ifeq ($(%s),1)" (map toUpper $ mrname r))
+        line (printf "unexport %s" (map toUpper $ mrname r))
         text (mrtext r)
         line "else"
         text inner
