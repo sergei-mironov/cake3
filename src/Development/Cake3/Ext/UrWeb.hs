@@ -358,7 +358,10 @@ sql f = addHdr $ UrpSql f
   
 jsFunc m u j = addHdr $ UrpJSFunc m u j
 
-safeGet s = addHdr $ UrpSafeGet s
+safeGet :: (MonadMake m) => File -> String -> UrpGen m ()
+safeGet m fn
+  | (takeExtension m) /= ".ur" = fail (printf "safeGet: not an Ur/Web module name specified (%s)" (toFilePath m))
+  | otherwise = addHdr $ UrpSafeGet (printf "%s/%s" (takeBaseName m) fn)
 
 url = UrpUrl
 
@@ -569,8 +572,8 @@ bin' dir src_name src_contents = do
     addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
   ffi (jsmod ".urs")
 
-  safeGet $ printf "%s/blobpage" (modname wrapmod)
-  safeGet $ printf "%s/blob" (modname wrapmod)
+  safeGet (wrapmod ".ur") "blobpage"
+  safeGet (wrapmod ".ur") "blob"
   module_ (pair $ wrapmod ".ur")
 
   where
