@@ -96,10 +96,6 @@ main_ (A tgturp False drm ins) = do
   when (null ins) $ do
     fail "At least one file should be specified, see --help"
 
-  exists <- doesDirectoryExist tgtdir
-  when (not exists) $ do
-    fail "Output is not a directory"
-
   cntnts <- mapM BS.readFile ins
 
   setCurrentDirectory tgtdir

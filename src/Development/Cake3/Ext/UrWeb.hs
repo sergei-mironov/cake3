@@ -473,6 +473,8 @@ bin dir src = do
 bin' :: (MonadIO m, MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
 bin' dir src_name src_contents = do
 
+  liftIO $ createDirectoryIfMissing True (toFilePath dir)
+
   let mime = guessMime src_name
   let mn = (mkname src_name)
   let wrapmod ext = (dir </> mn) .= ext
