@@ -86,9 +86,10 @@ main_ (A tgturp False drm ins) = do
   when (null ins) $ do
     fail "At least one file should be specified, see --help"
 
-  exists <- doesDirectoryExist tgtdir
-  when (not exists) $ do
-    fail $ "Couldn't create output file, no such directory " ++ show tgtdir
+  -- exists <- doesDirectoryExist tgtdir
+  -- when (not exists) $ do
+  --   fail $ "Couldn't create output file, no such directory " ++ show tgtdir
+  liftIO $ createDirectoryIfMissing True tgtdir
 
   when (null tgtdir) $ do
     fail "An output directory should be specified, use -o"
