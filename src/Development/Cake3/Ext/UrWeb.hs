@@ -193,10 +193,9 @@ instance ToUrpLine UrpModToken where
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
--- instance (Monad m) => MonadAction (UrpGen (A' m)) m where
---   liftAction a = UrpGen (lift a)
-
 toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
+
+toTmpFile wr = genTmpFile $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
@@ -207,35 +206,31 @@ uwlib urpfile m = do
   let u@(Urp _ _ hdr mod) = urpst s
   let pkgcfg = (urpPkgCfg u)
 
-  inp <- rule' $ do
-    let inp = urpfile .= "urp.in"
-    toFile inp $ do
+  forM_ (urpSrcs u) $ \(c,fl) -> do
+    let flags = concat $ fl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
+    let i = makevar "URINCL" "-I$(shell urweb -print-cinclude) " 
+    let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
+    let cpp = makevar "URCPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
+    rule2 $ do
+      case takeExtension c of
+        ".cpp" -> shell [cmd| $cpp -c $i $(string flags) -o @(c .= "o") $(c) |]
+        ".c" -> shell [cmd| $cc -c $i $(string flags) -o @(c .= "o") $(c) |]
+        e -> error ("Unknown C-source extension " ++ e)
+
+  inp_in <- toTmpFile $ do
       forM hdr (line . toUrpLine (urpUp urpfile))
       line ""
       forM mod (line . toUrpLine (urpUp urpfile))
 
-    forM_ (urpSrcs u) $ \(c,fl) -> do
-      let flags = concat $ fl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
-      let i = makevar "URINCL" "-I$(shell urweb -print-cinclude) " 
-      let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
-      let cpp = makevar "URCPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
-      rule2 $ do
-        case takeExtension c of
-          ".cpp" -> shell [cmd| $cpp -c $i $(string flags) -o @(c .= "o") $(c) |]
-          ".c" -> shell [cmd| $cc -c $i $(string flags) -o @(c .= "o") $(c) |]
-          e -> error ("Unknown C-source extension " ++ e)
-
-    depend (urpDeps u)
-    depend (urpLibs u)
-    shell [cmd|touch @inp|]
-
   rule' $ do
-    let cpy = [cmd|cat $inp|] :: CommandGen' (Make' IO)
+    let cpy = [cmd|cat $inp_in|] :: CommandGen' (Make' IO)
     let l = foldl' (\a p -> do
                             let l = makevar (map toUpper $ printf "lib%s" p) (printf "$(shell pkg-config --libs %s)" p)
                             [cmd| $a | sed 's@@$(string $ maskPkgCfg p)@@$l@@'  |]
                             ) cpy pkgcfg
     shell [cmd| $l > @urpfile |]
+    depend (urpDeps u)
+    depend (urpLibs u)
 
   return $ UWLib u
 
@@ -269,17 +264,6 @@ rewrite a s = addHdr $ UrpRewrite a s
 
 urpUp :: File -> FilePath
 urpUp f = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory $ toFilePath f
-
--- | Dir name , file to embed
--- data UrEmbed = Urembed File File
---   deriving (Show)
-
--- data UrpLibReference
---   = UrpLibStandaloneMake File 
---   | UrpLibStandaloneMake2 File 
---   | UrpLibInternal UWLib
---   | UrpLibEmbed File File
---   deriving(Show)
 
 -- | A general method of including a library into the UrWeb project.
 library' :: (MonadMake m)

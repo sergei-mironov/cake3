@@ -67,10 +67,13 @@ data MakeState = MS {
   , warnings :: String
     -- ^ Warnings found so far
   , outputFile :: File
+    -- ^ Name of the Makefile being generated
+  , tmpIndex :: Int
+    -- ^ Index to build temp names
   }
 
 -- Oh, such a boilerplate
-initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf where
+initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf 0 where
   defr = emptyRecipe "<internal>"
 
 getPlacementPos :: Make Int
@@ -82,6 +85,12 @@ addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms
 
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
+
+tmpFile :: (MonadMake m) => m File
+tmpFile = liftMake $ do
+  s <- get
+  put s{tmpIndex = (tmpIndex s)+1}
+  return (fromFilePath (".cake3" </> ("tmp"++(show (tmpIndex s)))))
 
 -- | Add prebuild command
 prebuild, postbuild :: (MonadMake m) => CommandGen -> m ()

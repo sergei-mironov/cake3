@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -40,6 +41,8 @@ module Development.Cake3 (
   , (</>)
   , toFilePath
   , readFileForMake
+  , genFile
+  , genTmpFile
 
   -- Make parts
   , prerequisites
@@ -151,10 +154,10 @@ phony name = do
   produce (W.fromFilePath name :: File)
   markPhony
 
--- | Build a Recipe using recipe builder provided, than record the Recipe to the
--- MakeState. Return the copy of Recipe (which should not be changed in future)
--- and the result of recipe builder. The typical recipe builder result is the
--- list of it's targets.
+-- | Build a Recipe using the builder provided and record it to the MakeState.
+-- Return the copy of Recipe (which should not be changed in future) and the
+-- result of recipe builder. The typical recipe builder result is the list of
+-- it's targets.
 --
 -- /Example/
 -- Lets declare a rule which builds "main.o" out of "main.c" and "CFLAGS"
@@ -182,5 +185,20 @@ rule act = snd <$> withPlacement (rule2 act)
 -- | A version of rule, without monad set explicitly
 rule' :: (MonadMake m) => A a -> m a
 rule' act = liftMake $ snd <$> withPlacement (rule2 act)
+
+
+genFile :: (MonadMake m) => File -> String -> m File
+genFile tgt cnt = rule' $do
+  shell [cmd|-rm -rf @tgt |]
+  forM_ (lines cnt) $ \l -> do
+    shell [cmd|echo '$(string (quote_dollar l))' >> @tgt |]
+  return tgt
+  where
+    quote_dollar [] = []
+    quote_dollar ('$':cs) = '$':'$':(quote_dollar cs)
+    quote_dollar (c:cs) = c : (quote_dollar cs)
+
+genTmpFile :: (MonadMake m) => String -> m File
+genTmpFile cnt = tmpFile >>= \f -> genFile f cnt
 
 
