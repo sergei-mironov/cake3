@@ -211,10 +211,11 @@ uwlib urpfile m = do
     let i = makevar "URINCL" "-I$(shell urweb -print-cinclude) " 
     let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
     let cpp = makevar "URCPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
+    let incfl = extvar "UR_CFLAGS"
     rule2 $ do
       case takeExtension c of
-        ".cpp" -> shell [cmd| $cpp -c $i $(string flags) -o @(c .= "o") $(c) |]
-        ".c" -> shell [cmd| $cc -c $i $(string flags) -o @(c .= "o") $(c) |]
+        ".cpp" -> shell [cmd| $cpp -c $incfl $i $(string flags) -o @(c .= "o") $(c) |]
+        ".c" -> shell [cmd| $cc -c $i $incfl $(string flags) -o @(c .= "o") $(c) |]
         e -> error ("Unknown C-source extension " ++ e)
 
   inp_in <- toTmpFile $ do
