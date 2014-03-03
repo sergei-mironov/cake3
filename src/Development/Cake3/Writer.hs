@@ -9,6 +9,7 @@ import Control.Monad (when)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.State (MonadState, StateT(..), runStateT, State(..), execState, evalState, runState, modify, get, put)
 import Control.Monad.Trans
+import Control.Monad.Writer (MonadWriter, WriterT(..), execWriterT, tell)
 import Data.List as L
 import Data.Char
 import Data.Maybe (catMaybes)
@@ -72,18 +73,18 @@ runMakeLL :: String -> MakeLL () -> Set Recipe
 runMakeLL templ m = snd $ execState (unMakeLL m) (names, S.empty) where
   names = map fromFilePath $ map (\x -> printf ".%s%d" templ x) $ ([1..] :: [Int])
 
-produceLL :: Recipe -> MakeLL ()
-produceLL r = modify (\(a,b) -> (a,S.insert r b))
+copyRecipeLL :: Recipe -> MakeLL ()
+copyRecipeLL r = modify (\(a,b) -> (a,S.insert r b))
 
 ruleLL :: A' MakeLL a -> MakeLL Recipe
 ruleLL act = do
   (r,_) <- runA "<internal>" act
-  produceLL r
+  copyRecipeLL r
   return r
 
 applySubprojects :: Map File [Command] -> Set Recipe -> Set Recipe
 applySubprojects sp rs = runMakeLL "subproject" (transformRecipesM_ f rs) where
-  f r | L.null scmds = produceLL r
+  f r | L.null scmds = copyRecipeLL r
       | otherwise = do
           n1 <- fresh
           n2 <- fresh
@@ -139,7 +140,7 @@ fixMultiTarget rs = runMakeLL "fix-multy" (transformRecipesM_ f rs) where
             markIntermediate
           return ()
       | otherwise = do
-          produceLL r
+          copyRecipeLL r
 
 -- | Operate on a prerequisites which themselfs are targets of a multitarget rule. Make
 -- the conversion from:
@@ -166,6 +167,19 @@ completeMultiTarget rs =
         case (not . S.null) ((rsrc r)`S.intersection` mulpack) of
           True -> r { rsrc = (rsrc r) `S.union` mulpack }
           False -> r) r badlist
+
+-- | Define a 'clean' phony target
+defineClean :: (Foldable t) => File -> t Recipe -> Set Recipe
+defineClean mk rs = runMakeLL "fix-multy" $ do
+  fs <- execWriterT $ do
+    forM_ rs $ \r -> do
+      lift $ copyRecipeLL r
+      when (not $ Phony `S.member` (rflags r)) $ do
+        tell (rtgt r)
+  ruleLL $ do
+    phony "clean"
+    unsafeShell [cmd|rm $(fs `S.difference` (S.singleton mk))|]
+  return ()
 
 -- | Rule referring to the 
 defaultMakefile :: File
@@ -213,13 +227,14 @@ buildMake ms = do
     line "export MAIN=1" 
     line ""
     r <- runA_ "<internal>" $ do
-      produce (queryTargets (recipes ms))
+      produce (queryTargets (defineClean (outputFile ms) $ recipes ms))
       unsafeShell [cmd|-mkdir .cake3|]
       commands (rcmd $ prebuilds ms)
       unsafeShell [cmd|$(make) -f $(outputFile ms) $(makecmdgoals)|]
       commands (rcmd $ postbuilds ms)
       markPhony
-    writeRules $ applyPlacement (placement ms) $ fixMultiTarget [r]
+    writeRules $ applyPlacement (placement ms)
+               $ fixMultiTarget [r]
     line ""
 
   hdr <- runLines $ do
@@ -236,6 +251,7 @@ buildMake ms = do
     makecmdgoals = extvar "MAKECMDGOALS"
 
     rs' = applyPlacement (placement ms)
+        $ defineClean (outputFile ms)
         $ fixMultiTarget
         $ completeMultiTarget
         $ addMakeDeps (outputFile ms)

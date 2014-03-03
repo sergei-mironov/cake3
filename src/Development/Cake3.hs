@@ -141,19 +141,6 @@ withPlacement mk = do
     addPlacement 0 (S.findMin (rtgt r))
     return (r,a)
 
--- | Adds the phony target for a rule. Typical usage:
--- 
--- > rule $ do
--- >  phony "clean"
--- >  unsafeShell [cmd|rm $elf $os $d|]
--- >
-phony ::
-  String -- ^ A name of phony target
-  -> A ()
-phony name = do
-  produce (W.fromFilePath name :: File)
-  markPhony
-
 -- | Build a Recipe using the builder provided and record it to the MakeState.
 -- Return the copy of Recipe (which should not be changed in future) and the
 -- result of recipe builder. The typical recipe builder result is the list of

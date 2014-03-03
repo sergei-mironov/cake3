@@ -213,6 +213,19 @@ prerequisites = rsrc <$> get
 markPhony :: (Monad m) => A' m ()
 markPhony = modify $ \r -> r { rflags = S.insert Phony (rflags r) }
 
+-- | Adds the phony target for a rule. Typical usage:
+-- 
+-- > rule $ do
+-- >  phony "clean"
+-- >  unsafeShell [cmd|rm $elf $os $d|]
+-- >
+phony :: (Monad m)
+  => String -- ^ A name of phony target
+  -> A' m ()
+phony name = do
+  produce (fromFilePath name :: File)
+  markPhony
+
 -- | Mark the recipe as 'INTERMEDIATE' i.e. claim that all it's targets may be
 -- removed after the build process. Makefile-specific.
 markIntermediate :: (Monad m) => A' m ()
