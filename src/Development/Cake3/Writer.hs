@@ -181,17 +181,14 @@ isRequiredFor rs r f = if f`S.member`(rtgt r) then True else godeeper where
   godeeper = or $ map (\tgt -> or $ map (\r -> isRequiredFor rs r f) (selectBySrc tgt)) (S.toList $ rtgt r)
   selectBySrc f = S.toList . fst $ S.partition (\r -> f`S.member`(rsrc r)) rs
 
--- | There are only 2 kind of rules: 1) ones that depend on a Makefile, and 2) ones
--- that Makefile depends on. Case-2 is known in advance (for example, when the
--- the contents of a file is required to build a Makefile then Makefile depends
--- on this file). This function adds the case-1 dependencies.
+-- | There are only 2 kind of rules: 1) rules which depend on the Makefile, and
+-- 2) rules which Makefile depends on. Case-2 is known in advance (for example,
+-- when the contents of a file is required to build a Makefile then Makefile
+-- depends on this file). This function adds the case-1 dependencies.
 addMakeDeps :: File -> Set Recipe -> Set Recipe
-addMakeDeps makefile rs
-  | S.null (S.filter (\r -> makefile `S.member` (rtgt r)) rs) = rs
-  | otherwise = S.map addMakeDeps_ rs
-  where
-    addMakeDeps_ r | not (isRequiredFor rs r makefile) = addPrerequisite makefile r
-                   | otherwise = r
+addMakeDeps makefile rs = S.map addMakeDeps_ rs where
+  addMakeDeps_ r | not (isRequiredFor rs r makefile) = addPrerequisite makefile r
+                 | otherwise = r
 
 
 
