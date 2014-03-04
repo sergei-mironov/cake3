@@ -39,7 +39,7 @@ import System.FilePath.Wrapper
 import Development.Cake3.Monad
 import Development.Cake3
 
-data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader
+data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
   deriving(Show,Data,Typeable)
 
 data UrpRewrite = UrpStyle | UrpAll
@@ -153,7 +153,9 @@ class ToUrpWord a where
 
 instance ToUrpWord UrpAllow where
   toUrpWord (UrpMime) = "mime"
+  toUrpWord (UrpHeader) = "requestHeader"
   toUrpWord (UrpUrl) = "url"
+  toUrpWord (UrpEnvVar) = "env"
   toUrpWord (UrpResponseHeader) = "responseHeader"
 
 instance ToUrpWord UrpRewrite where
@@ -355,6 +357,10 @@ mime = UrpMime
 style = UrpStyle
 
 all = UrpAll
+
+env = UrpEnvVar
+
+hdr = UrpHeader
 
 responseHeader = UrpResponseHeader
 
