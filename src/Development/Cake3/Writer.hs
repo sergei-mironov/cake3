@@ -168,7 +168,8 @@ completeMultiTarget rs =
           True -> r { rsrc = (rsrc r) `S.union` mulpack }
           False -> r) r badlist
 
--- | Define a 'clean' phony target
+-- | Define a 'clean' phony target. The rule removes all targets except phony
+-- targets and the Makefile itself
 defineClean :: (Foldable t) => File -> t Recipe -> Set Recipe
 defineClean mk rs = runMakeLL "fix-multy" $ do
   fs <- execWriterT $ do
@@ -178,7 +179,7 @@ defineClean mk rs = runMakeLL "fix-multy" $ do
         tell (rtgt r)
   ruleLL $ do
     phony "clean"
-    unsafeShell [cmd|rm $(fs `S.difference` (S.singleton mk))|]
+    unsafeShell [cmd|-rm $(fs `S.difference` (S.singleton mk))|]
   return ()
 
 -- | Rule referring to the 
