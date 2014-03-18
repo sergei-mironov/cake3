@@ -22,10 +22,6 @@ main = writeMake (file "Makefile") $ do
     shell [cmd| gcc -o @(file "main.elf") $os |]
 
   rule $ do
-    phony "clean"
-    unsafeShell [cmd|rm $elf $os $d|]
-
-  rule $ do
     phony "all"
     depend elf
 

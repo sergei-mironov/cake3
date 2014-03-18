@@ -3,7 +3,8 @@
 
 GUARD = .cake3/GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)
 
-ifdef MAIN
+ifeq ($(MAIN),1)
+unexport MAIN
 
 # Main section
 
@@ -13,20 +14,34 @@ URVERSION = $(shell urweb -version)
 all: ./Makefile.devel ./Script.urp ./Test1.exe ./Test2.exe
 ./Test2.exe: ./Makefile.devel ./Test2.urp $(call GUARD,URVERSION)
 	urweb -dbms sqlite ./Test2
-./Test2.urp: ./Makefile.devel ./Test2.urp.in
-	cat ./Test2.urp.in > ./Test2.urp
-./Test2.urp.in: ./Makefile.devel ./Script.urp ./Test2.ur
-	touch ./Test2.urp.in
+./Test2.urp: ./Makefile.devel ./Script.urp ./Test2.ur .cake3/tmp2
+	cat .cake3/tmp2 > ./Test2.urp
+.cake3/tmp2: ./Makefile.devel
+	-rm -rf .cake3/tmp2
+	echo 'library ./Script' >> .cake3/tmp2
+	echo '' >> .cake3/tmp2
+	echo './Test2' >> .cake3/tmp2
 ./Test1.exe: ./Makefile.devel ./Test1.urp $(call GUARD,URVERSION)
 	urweb -dbms sqlite ./Test1
-./Test1.urp: ./Makefile.devel ./Test1.urp.in
-	cat ./Test1.urp.in > ./Test1.urp
-./Test1.urp.in: ./Makefile.devel ./Script.urp ./Test1.ur
-	touch ./Test1.urp.in
-./Script.urp: ./Makefile.devel ./Script.urp.in $(call GUARD,LIBJANSSON)
-	cat ./Script.urp.in | sed 's@%JANSSON%@$(LIBJANSSON)@' > ./Script.urp
-./Script.urp.in: ./Makefile.devel ./Script.h ./Script.o
-	touch ./Script.urp.in
+./Test1.urp: ./Makefile.devel ./Script.urp ./Test1.ur .cake3/tmp1
+	cat .cake3/tmp1 > ./Test1.urp
+.cake3/tmp1: ./Makefile.devel
+	-rm -rf .cake3/tmp1
+	echo 'allow url http://code.jquery.com/ui/1.10.3/jquery-ui.js' >> .cake3/tmp1
+	echo 'allow mime text/javascript' >> .cake3/tmp1
+	echo 'library ./Script' >> .cake3/tmp1
+	echo 'debug' >> .cake3/tmp1
+	echo '' >> .cake3/tmp1
+	echo './Test1' >> .cake3/tmp1
+./Script.urp: ./Makefile.devel ./Script.h ./Script.o .cake3/tmp0 $(call GUARD,LIBJANSSON)
+	cat .cake3/tmp0 | sed 's@%JANSSON%@$(LIBJANSSON)@' > ./Script.urp
+.cake3/tmp0: ./Makefile.devel
+	-rm -rf .cake3/tmp0
+	echo 'ffi ./Script' >> .cake3/tmp0
+	echo 'include ./Script.h' >> .cake3/tmp0
+	echo 'link ./Script.o' >> .cake3/tmp0
+	echo 'link %JANSSON%' >> .cake3/tmp0
+	echo '' >> .cake3/tmp0
 ./Cakegen: ./Cakefile.hs
 	cake3
 ./Makefile.devel: ./Cakegen
@@ -42,24 +57,28 @@ else
 
 # Prebuild/postbuild section
 
+export MAIN=1
+
+ifneq ($(MAKECMDGOALS),clean)
+
 .PHONY: all
 all: .fix-multy1
 .PHONY: ./Test2.exe
 ./Test2.exe: .fix-multy1
 .PHONY: ./Test2.urp
 ./Test2.urp: .fix-multy1
-.PHONY: ./Test2.urp.in
-./Test2.urp.in: .fix-multy1
+.PHONY: .cake3/tmp2
+.cake3/tmp2: .fix-multy1
 .PHONY: ./Test1.exe
 ./Test1.exe: .fix-multy1
 .PHONY: ./Test1.urp
 ./Test1.urp: .fix-multy1
-.PHONY: ./Test1.urp.in
-./Test1.urp.in: .fix-multy1
+.PHONY: .cake3/tmp1
+.cake3/tmp1: .fix-multy1
 .PHONY: ./Script.urp
 ./Script.urp: .fix-multy1
-.PHONY: ./Script.urp.in
-./Script.urp.in: .fix-multy1
+.PHONY: .cake3/tmp0
+.cake3/tmp0: .fix-multy1
 .PHONY: ./Cakegen
 ./Cakegen: .fix-multy1
 .PHONY: ./Makefile.devel
@@ -68,6 +87,12 @@ all: .fix-multy1
 .fix-multy1: 
 	-mkdir .cake3
 	urweb -print-cinclude >/dev/null
-	$(MAKE) -f ./Makefile.devel MAIN=1 $(MAKECMDGOALS)
+	$(MAKE) -f ./Makefile.devel $(MAKECMDGOALS)
+
+endif
+.PHONY: clean
+clean: 
+	-rm -rf .cake3
+	-rm ./Cakegen ./Script.urp ./Test1.exe ./Test1.urp ./Test2.exe ./Test2.urp .cake3/tmp0 .cake3/tmp1 .cake3/tmp2
 
 endif

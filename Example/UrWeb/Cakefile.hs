@@ -21,11 +21,11 @@ project = do
     allow mime "text/javascript";
     library u;
     debug
-    module_ (single "Test1.ur")
+    ur (single "Test1.ur")
 
   t2 <- uwapp "-dbms sqlite" "Test2.urp" $ do
     library u;
-    module_ (single "Test2.ur")
+    ur (single "Test2.ur")
 
   rule $ do
     phony "all"

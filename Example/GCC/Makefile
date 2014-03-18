@@ -3,15 +3,13 @@
 
 GUARD = .cake3/GUARD_$(1)_$(shell echo $($(1)) | md5sum | cut -d ' ' -f 1)
 
-ifdef MAIN
+ifeq ($(MAIN),1)
+unexport MAIN
 
 # Main section
 
 .PHONY: all
 all: ./Makefile ./main.elf
-.PHONY: clean
-clean: ./Makefile
-	rm ./main.elf ./main\ space.o ./depend.mk
 ./main.elf: ./Makefile ./main\ space.o
 	gcc -o ./main.elf ./main\ space.o
 ./main\ space.o: ./Makefile ./main\ space.c $(call GUARD,CFLAGS)
@@ -31,10 +29,12 @@ else
 
 # Prebuild/postbuild section
 
+export MAIN=1
+
+ifneq ($(MAKECMDGOALS),clean)
+
 .PHONY: all
 all: .fix-multy1
-.PHONY: clean
-clean: .fix-multy1
 .PHONY: ./main.elf
 ./main.elf: .fix-multy1
 .PHONY: ./main\ space.o
@@ -51,6 +51,12 @@ clean: .fix-multy1
 	@echo "*****************"
 	@echo "THE CAKE3 EXAMPLE"
 	@echo "*****************"
-	$(MAKE) -f ./Makefile MAIN=1 $(MAKECMDGOALS)
+	$(MAKE) -f ./Makefile $(MAKECMDGOALS)
+
+endif
+.PHONY: clean
+clean: 
+	-rm -rf .cake3
+	-rm ./Cakegen ./depend.mk ./main\ space.o ./main.elf
 
 endif

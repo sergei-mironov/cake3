@@ -9,14 +9,14 @@ import Control.Monad (when)
 import Control.Monad.Identity (runIdentity)
 import Control.Monad.State (MonadState, StateT(..), runStateT, State(..), execState, evalState, runState, modify, get, put)
 import Control.Monad.Trans
-import Control.Monad.Writer (MonadWriter, WriterT(..), execWriterT, tell)
+import Control.Monad.Writer (MonadWriter, WriterT(..), execWriterT, execWriter, tell)
 import Data.List as L
 import Data.Char
 import Data.Maybe (catMaybes)
 import Data.Monoid
 import Data.String
-import Data.Foldable (Foldable(..), foldl')
-import Data.Foldable (forM_)
+import Data.Foldable (Foldable(..), forM_)
+import qualified Data.Foldable as F
 import Data.Traversable (forM)
 import Data.Set (Set)
 import qualified Data.Set as S
@@ -168,19 +168,33 @@ completeMultiTarget rs =
           True -> r { rsrc = (rsrc r) `S.union` mulpack }
           False -> r) r badlist
 
--- | Define a 'clean' phony target. The rule removes all targets except phony
--- targets and the Makefile itself
-defineClean :: (Foldable t) => File -> t Recipe -> Set Recipe
-defineClean mk rs = runMakeLL "fix-multy" $ do
-  fs <- execWriterT $ do
+hasClean :: (Foldable t) => t Recipe -> Bool
+hasClean rs = F.foldl' flt False rs where
+  flt True _ = True
+  flt False r = (Phony `S.member`(rflags r)) && ((fromFilePath "clean")`S.member`(rtgt r))
+
+intermediateFiles :: (Foldable t) => t Recipe -> Set File
+intermediateFiles rs = 
+  execWriter $ do
     forM_ rs $ \r -> do
-      lift $ copyRecipeLL r
       when (not $ Phony `S.member` (rflags r)) $ do
         tell (rtgt r)
+
+cleanRuleLL :: Set File -> MakeLL Recipe
+cleanRuleLL fs =
   ruleLL $ do
     phony "clean"
-    unsafeShell [cmd|-rm $(fs `S.difference` (S.singleton mk))|]
-  return ()
+    unsafeShell [cmd|-rm $(fs)|]
+    unsafeShell [cmd|-rm -rf .cake3|]
+
+-- | Define a 'clean' phony target. The rule removes all targets except phony
+-- targets and the Makefile itself
+defineClean :: File -> Set Recipe -> Set Recipe
+defineClean mk rs =
+  runMakeLL "defineClean" $ do
+    let fs = intermediateFiles rs
+    cleanRuleLL (fs `S.difference` (S.singleton mk))
+    return ()
 
 -- | Rule referring to the 
 defaultMakefile :: File
@@ -222,20 +236,32 @@ buildMake ms = do
     line ""
 
   sr <- region "SERVICE" $ do
-    line ""
-    line "# Prebuild/postbuild section"
-    line ""
-    line "export MAIN=1" 
-    line ""
     r <- runA_ "<internal>" $ do
-      produce (queryTargets (defineClean (outputFile ms) $ recipes ms))
+      produce (queryTargets (recipes ms))
       unsafeShell [cmd|-mkdir .cake3|]
       commands (rcmd $ prebuilds ms)
       unsafeShell [cmd|$(make) -f $(outputFile ms) $(makecmdgoals)|]
       commands (rcmd $ postbuilds ms)
       markPhony
-    writeRules $ applyPlacement (placement ms)
-               $ fixMultiTarget [r]
+
+    line ""
+    line "# Prebuild/postbuild section"
+    line ""
+    line "export MAIN=1" 
+    line ""
+
+    case hasClean (recipes ms) of
+      True -> do
+        writeRules $ applyPlacement (placement ms)
+                   $ fixMultiTarget [r]
+      False -> do
+        line "ifneq ($(MAKECMDGOALS),clean)"
+        line ""
+        writeRules $ applyPlacement (placement ms)
+                   $ fixMultiTarget [r]
+        line ""
+        line "endif"
+        writeRules $ defineClean (outputFile ms) (recipes ms)
     line ""
 
   hdr <- runLines $ do
@@ -252,7 +278,6 @@ buildMake ms = do
     makecmdgoals = extvar "MAKECMDGOALS"
 
     rs' = applyPlacement (placement ms)
-        $ defineClean (outputFile ms)
         $ fixMultiTarget
         $ completeMultiTarget
         $ addMakeDeps (outputFile ms)

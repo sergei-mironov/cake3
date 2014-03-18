@@ -67,17 +67,14 @@ is safe to depend on.
 >   shell [cmd| echo CFLAGS is $cflags |]
 >   shell [cmd| gcc $cflags -o @(file "main.elf") $os |]
 
-Main function of the Haskell program. We want to produce the Makefile with two
-top-level targets: all and clean. Also, we add selfUpdate rule which instructs
-make to rebuild the Makefile if Cakefiles change.
+Main function of the Haskell program. We want to produce the Makefile containing
+top-level target all. Also, we add selfUpdate rule which instructs make to
+rebuild the Makefile if Cakefiles change.
 
 Note that all will appear above clean since (all rule) is declared after the
 (clean rule) in the Cakefile.
 
 > main = writeMake (file "Makefile") $ do
->   rule $ do
->     phony "clean"
->     unsafeShell [cmd| rm $elf ; rm $os |]
 >   rule $ do
 >     phony "all"
 >     depend elf
