@@ -263,19 +263,15 @@ the Cakefile.hs. In particular:
 Random implementation details
 -----------------------------
 
-  1. User writes a cakefile (./Cake\*.hs) describing the rules. Refer to
-     Example/GHC/Cakefile.hs. Note, that different cakefiles should have
-     different names even if they are in different directories due to GHC import
-     restrictions. This way user can import one cakefile from another, as if
-     they were in the same directory. Actually, cake3 copies all cakefiles into
-     one temporary directory and compiles them there. Note that cake3 calls ghc
-     having several common haskell extentions enabled.
+  1. cake3 script copies all the Cake\*hs files it found in the project tree to
+     a single temporary directory before compiling the ./Cakegen application.
+     That is why all the cakefiles in project should have different names.
+     Another consequence - cakefiles as Haskell modules may be imported by
+     filename regardles of their actual position in the project tree.
 
-  2. Cake3 copies all Cake\*.hs files from your project tree into temporary dir
-     and compiles them with GHC (or calls GHCi). Before that, it creates a
-     ./Cake\*_P.hs pathfile containing information about paths. The most
-     important is _files_ function which translates relative _filename_ into
-     _"." </> path_to_subproject </> filename_.
+  2. Cake3 creates ./Cake\*\_P.hs files for every Cake\*hs. The \_P files
+     contain paths information. In particular, they define `file` function for
+     the current directiory.
 
   3. All filepaths in the final Makefile are relative.
 
