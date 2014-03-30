@@ -150,6 +150,7 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
 ### Features
 
   * *Cake3 generates the 'clean' rule automatically.*
+
     But if you define your own 'clean', cake3 will take it as is.
 
   * *Cake3 takes care of spaces inside the filenames.*
