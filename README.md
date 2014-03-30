@@ -89,7 +89,7 @@ Here is the example of simple Cakefile.hs:
 
       selfUpdate
 
-      cs <- filterDirectoryContentsRecursive [".c"]
+      cs <- return $ [file "main.c", file "second.c"]
 
       d <- rule $ do
         shell [cmd|gcc -M $cs -MF @(file "depend.mk")|]
