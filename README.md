@@ -277,10 +277,10 @@ Random implementation details
      important is _files_ function which translates relative _filename_ into
      _"." </> path_to_subproject </> filename_.
 
-  3. Cake3 uses relative paths only for the final Makefile.
+  3. All filepaths in the final Makefile are relative.
 
   4. Cake3 uses it's own representation of files (File). Many filepath functions
      (takeDirectory, takeBaseName, dropExtensions, </>, etc) are defined for
-     them. See System.FilePath.Wrapper.hs. FileLike typeclass makes it possible
-     to use them with plain FilePath as well.
+     File as members of FileLike typeclass. See System.FilePath.Wrapper for the
+     details.
 
