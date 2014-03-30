@@ -126,9 +126,9 @@ Here is the example of simple Cakefile.hs:
     'all' rule to be defined at the bottom of Cakefile.hs.
   * Starting from 0.4, cake3 outputs rule named 'clean' automatically. This rule
     contains recipe which deletes all intermediate files with 'rm' command.
-  * selfUpdate call includes the self-updating dependencies. That means, that
+  * `selfUpdate` call includes the self-updating dependencies. That means, that
     Makefile will depend on Cakefile.hs and thus will require ghc to present in
-    the system. Removing selfUpdate call will make the Makefile fully
+    the system. Removing `selfUpdate` call will make the Makefile fully
     Haskell-independent.
 
 
@@ -271,7 +271,7 @@ Random implementation details
 
   2. Cake3 creates ./Cake\*\_P.hs files for every Cake\*hs. The \_P files
      contain paths information. In particular, they define `file` function for
-     the current directiory.
+     the current directiory. `selfUpdate` function is also defined there.
 
   3. All filepaths in the final Makefile are relative.
 
