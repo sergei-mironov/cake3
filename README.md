@@ -85,7 +85,7 @@ Here is the example of simple Cakefile.hs:
     import Development.Cake3
     import Cakefile_P
 
-    main = writeMake "Makefile" $ do
+    main = writeMake (file "Makefile") $ do
 
       selfUpdate
 
