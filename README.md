@@ -240,16 +240,15 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
 
 #### Make syntax
 
-As a summary - only a samll subset of Make syntax is supported for generation.
-For complex algorithms Haskell looks more suitable so implement everything you
-need inside the Cakefile.hs. In particular:
+As a summary - only a samll subset of Make syntax is supported.  For complex
+algorithms Haskell looks more suitable so implement everything you need inside
+the Cakefile.hs. In particular:
 
-  * Cake3 offers no way of detecting directory content chages. For example, user
-    has to rerun the ./Cakegen if they add/remove a source file.
+  * Cake3 offers no way of detecting directory content chages at the moment. For
+    example, user has to rerun the ./Cakegen if they add/remove a source file.
   * Cake3 doesn't check the contents of Makefile variables. It is user's
     responsibility to keep them safe.
-  * Variables as targets is not supported. Implement this logic in Haskell for
-    now.
+  * DSL doesn't allow to place Make variables anywhere except the recipe.
 
 
 #### General
