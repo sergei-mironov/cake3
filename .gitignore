@@ -13,3 +13,5 @@ GUARD_*
 *_P.hs
 .*
 tags
+*.in
+*.exe

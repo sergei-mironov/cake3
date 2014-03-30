@@ -16,10 +16,6 @@ main = writeMake (file "Makefile") $ do
   fs <- os defaultFlags
 
   rule $ do
-    phony "clean"
-    unsafeShell [cmd| rm $(fs)|]
-
-  rule $ do
     phony "all"
     depend fs
 

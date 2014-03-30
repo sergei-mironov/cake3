@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                cake3
-version:             0.3.0.1
+version:             0.4.0.0
 synopsis:            Third cake the Makefile EDSL
 description:         Cake3 is a Makefile EDSL written in Haskell. Write your build logic in
                      Haskell, obtain clean and safe Makefile, distribute it to the end-users.
@@ -36,9 +36,6 @@ description:
     >       shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
     >   elf <- rule $ do
     >     shell [cmd| gcc -o @(file "main.elf") $os |]
-    >   rule $ do
-    >     phony "clean"
-    >     unsafeShell [cmd|rm $elf $os $d|]
     >   rule $ do
     >     phony "all"
     >     depend elf

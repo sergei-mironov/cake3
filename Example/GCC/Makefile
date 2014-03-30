@@ -56,7 +56,7 @@ all: .fix-multy1
 endif
 .PHONY: clean
 clean: 
-	-rm -rf .cake3
 	-rm ./Cakegen ./depend.mk ./main\ space.o ./main.elf
+	-rm -rf .cake3
 
 endif

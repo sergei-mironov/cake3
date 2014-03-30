@@ -1,3 +1,8 @@
+Version 0.4
+-----------
+Autobuild 'clean' rule. genFile and genTmpFile functions allowing to embed text
+files into the Makefile.
+
 Version 0.3
 -----------
 API changes, improve documentation, improve UrWeb extension
