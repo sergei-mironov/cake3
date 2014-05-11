@@ -16,6 +16,7 @@ main = do
     , std_out = Inherit
     , std_err = Inherit
     , close_fds = True
+    , delegate_ctlc = False
     , create_group = False
     }
   ret <- waitForProcess ph
