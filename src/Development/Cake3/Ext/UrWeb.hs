@@ -371,6 +371,8 @@ env = UrpEnvVar
 
 hdr = UrpHeader
 
+requestHeader = UrpHeader
+
 responseHeader = UrpResponseHeader
 
 script :: (MonadMake m) => String -> UrpGen m ()
