@@ -75,7 +75,7 @@ library
                      filepath, containers, text, monadloc, mtl,
                      bytestring, deepseq, system-filepath, text-format,
                      directory, attoparsec, mime-types,
-                     language-javascript, syb
+                     language-javascript, syb, parsec
 
   hs-source-dirs:    src
 
@@ -92,6 +92,6 @@ executable urembed
                      filepath, syb, optparse-applicative, directory,
                      text, bytestring, containers, language-javascript,
                      haskell-src-meta, template-haskell, attoparsec, monadloc,
-                     mime-types
+                     mime-types, parsec
   other-modules:     Paths_cake3
 

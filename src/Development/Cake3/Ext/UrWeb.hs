@@ -23,21 +23,26 @@ import Data.ByteString.Char8 (ByteString(..))
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import Data.String
-import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Error
-import Language.JavaScript.Parser
+import Language.JavaScript.Parser as JS
 import Network.Mime (defaultMimeLookup)
-import System.Directory
 import Text.Printf
+
+import Text.Parsec as P hiding (string)
+import Text.Parsec.Token as P hiding(lexeme, symbol)
+import qualified Text.Parsec.Token as P
+import Text.Parsec.ByteString as P
+
 import qualified System.FilePath as F
+import System.Directory
 import System.IO as IO
 
 import System.FilePath.Wrapper
 import Development.Cake3.Monad
-import Development.Cake3
+import Development.Cake3 hiding (many, (<|>))
 
 data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
   deriving(Show,Data,Typeable)
@@ -195,7 +200,10 @@ instance ToUrpLine UrpModToken where
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
-toFile f wr = liftIO $ writeFile (toFilePath f) $ execWriter $ wr
+toFile f' wr = liftIO $ do
+  let f = toFilePath f'
+  createDirectoryIfMissing True (takeDirectory f)
+  writeFile f $ execWriter $ wr
 
 toTmpFile wr = genTmpFile $ execWriter $ wr
 
@@ -389,7 +397,7 @@ data JSType = JSType {
 parse_js :: BS.ByteString -> Make (Either String ([JSType],[JSFunc]))
 parse_js contents = do
   runErrorT $ do
-    c <- either fail return (parse (BS.unpack contents) "<urembed_input>")
+    c <- either fail return (JS.parse (BS.unpack contents) "<urembed_input>")
     f <- concat <$> (forM (findTopLevelFunctions c) $ \f@(fn:_) -> (do
       ts <- mapM extractEmbeddedType (f`zip`(False:repeat True))
       let urdecl_ = urs_line ts
@@ -456,21 +464,97 @@ parse_js contents = do
     hio :: (MonadIO m) => Handle -> String -> m ()
     hio h = liftIO . hPutStrLn h
 
+
+transform_css :: (Stream s m Char) => ParsecT s u m [Either ByteString [Char]]
+transform_css = do
+  l1 <- map Left <$> blabla
+  l2 <- map Right <$> funs
+  e <- try (eof >> return True) <|> (return False)
+  case e of
+    True -> return (l1++l2)
+    False -> do
+      l <- transform_css
+      return (l1 ++ l2 ++ l)
+
+  where
+
+    symbol = P.symbol l
+    lexeme = P.lexeme l
+
+    string  = lexeme (
+      between (char '\'') (char '\'') (strchars '\'') <|>
+      between (char '"') (char '"') (strchars '"'))
+      where
+        strchars e = many $ satisfy (/=e)
+
+    fun1 = lexeme $ do
+      symbol "url"
+      symbol "("
+      s <- string
+      symbol ")"
+      return s
+
+    blabla = do
+      l <- manyTill anyChar (eof <|> (try (lookAhead fun1) >> return ()))
+      case null l of
+        True -> return []
+        False -> return [BS.pack l]
+
+    funs = many (try fun1)
+
+    l =  P.makeTokenParser $ P.LanguageDef
+        { P.commentStart	 = "/*"
+        , P.commentEnd	 = "*/"
+        , P.commentLine	 = "//"
+        , P.nestedComments = True
+        , P.identStart	 = P.letter
+        , P.identLetter	 = P.alphaNum <|> oneOf "_@-"
+        , P.reservedNames   = []
+        , P.reservedOpNames = []
+        , P.caseSensitive  = False
+        , P.opStart        = l
+        , P.opLetter       = l
+        }
+        where l = oneOf ":!#$%&*+./<=>?@\\^|-~"
+
+parse_css :: (String -> String) -> BS.ByteString -> IO (Either P.ParseError BS.ByteString)
+parse_css f inp = do
+  case P.runParser transform_css () "-" inp of
+    Left e -> return $ Left e
+    Right pr -> do
+      b <- forM pr $ \i -> do
+        case i of
+          Left bs -> return bs
+          Right u -> return (BS.pack $ "url ('" ++ (f u) ++ "')")
+      return $ Right $ BS.concat b
+
 bin :: (MonadIO m, MonadMake m) => File -> File -> UrpGen m ()
 bin dir src = do
   c <- readFileForMake src
   bin' dir (toFilePath src) c
 
 bin' :: (MonadIO m, MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
-bin' dir src_name src_contents = do
-
-  liftIO $ createDirectoryIfMissing True (toFilePath dir)
+bin' dir src_name src_contents' = do
 
   let mime = guessMime src_name
   let mn = (mkname src_name)
+
   let wrapmod ext = (dir </> mn) .= ext
   let binmod ext = (dir </> (mn ++ "_c")) .= ext
   let jsmod ext = (dir </> (mn ++ "_js")) .= ext
+
+  src_contents <- if ((takeExtension src_name) == ".css") then do
+                    e <- liftIO $ parse_css (\x ->
+                      let (url, query) = span (\c -> not $ elem c "?#") x in
+                      modname (const (fromFilePath $ mkname url)) ++ "/blobpage" ++ query
+                      ) src_contents'
+                    case e of
+                      Left e -> do
+                        fail $ printf "Error while parsing css %s: %s" src_name (show e)
+                      Right b -> do
+                        return b
+                   else
+                      return src_contents'
 
   -- Binary module
   let binfunc = printf "uw_%s_binary" (modname binmod)
@@ -534,7 +618,7 @@ bin' dir src_name src_contents = do
                           e <- liftMake $ parse_js src_contents
                           case e of
                             Left e -> do
-                              fail $ printf "Error while parsing %s" src_name
+                              fail $ printf "Error while parsing javascript %s: %s" src_name e
                             Right decls -> do
                               return decls
                        else

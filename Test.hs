@@ -23,25 +23,6 @@ import Text.Parsec.ByteString as P
 
 import System.IO
 
-cssLang :: (Stream s m Char) => GenLanguageDef s u m
-cssLang = P.LanguageDef
-		{ P.commentStart	 = "/*"
-		, P.commentEnd	 = "*/"
-		, P.commentLine	 = "//"
-		, P.nestedComments = True
-		, P.identStart	 = P.letter
-		, P.identLetter	 = P.alphaNum <|> oneOf "_@-"
-		, P.reservedNames   = []
-		, P.reservedOpNames = []
-    , P.caseSensitive  = False
-    , P.opStart        = l
-    , P.opLetter       = l
-		}
-    where l = oneOf ":!#$%&*+./<=>?@\\^|-~"
-
-l :: (Stream s m Char) => GenTokenParser s u m
-l =  P.makeTokenParser cssLang
-
 
 everything :: (Stream s m Char) => ParsecT s u m [Either ByteString [Char]]
 everything = do
@@ -76,6 +57,21 @@ everything = do
         False -> return [B.pack l]
 
     funs = many (try fun1)
+
+    l =  P.makeTokenParser $ P.LanguageDef
+        { P.commentStart	 = "/*"
+        , P.commentEnd	 = "*/"
+        , P.commentLine	 = "//"
+        , P.nestedComments = True
+        , P.identStart	 = P.letter
+        , P.identLetter	 = P.alphaNum <|> oneOf "_@-"
+        , P.reservedNames   = []
+        , P.reservedOpNames = []
+        , P.caseSensitive  = False
+        , P.opStart        = l
+        , P.opLetter       = l
+        }
+        where l = oneOf ":!#$%&*+./<=>?@\\^|-~"
     
 
 main :: IO ()
