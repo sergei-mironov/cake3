@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE LambdaCase #-}
 module Development.Cake3.Ext.UrWeb where
 
 import Data.Data
@@ -517,15 +518,17 @@ transform_css = do
         }
         where l = oneOf ":!#$%&*+./<=>?@\\^|-~"
 
-parse_css :: (String -> String) -> BS.ByteString -> IO (Either P.ParseError BS.ByteString)
-parse_css f inp = do
+parse_css :: (Monad m) => BS.ByteString -> (String -> m String) -> m (Either P.ParseError BS.ByteString)
+parse_css inp f = do
   case P.runParser transform_css () "-" inp of
     Left e -> return $ Left e
     Right pr -> do
       b <- forM pr $ \i -> do
         case i of
           Left bs -> return bs
-          Right u -> return (BS.pack $ "url ('" ++ (f u) ++ "')")
+          Right u -> do
+            u' <- f u
+            return (BS.pack $ "url ('" ++ u' ++ "')")
       return $ Right $ BS.concat b
 
 bin :: (MonadIO m, MonadMake m) => File -> File -> UrpGen m ()
@@ -543,18 +546,20 @@ bin' dir src_name src_contents' = do
   let binmod ext = (dir </> (mn ++ "_c")) .= ext
   let jsmod ext = (dir </> (mn ++ "_js")) .= ext
 
-  src_contents <- if ((takeExtension src_name) == ".css") then do
-                    e <- liftIO $ parse_css (\x ->
-                      let (url, query) = span (\c -> not $ elem c "?#") x in
-                      modname (const (fromFilePath $ mkname url)) ++ "/blobpage" ++ query
-                      ) src_contents'
-                    case e of
-                      Left e -> do
-                        fail $ printf "Error while parsing css %s: %s" src_name (show e)
-                      Right b -> do
-                        return b
-                   else
-                      return src_contents'
+  (src_contents, nurls) <-
+    if ((takeExtension src_name) == ".css") then do
+        (e,urls) <- return $ runWriter $ parse_css src_contents' $ \x -> do
+          let (url, query) = span (\c -> not $ elem c "?#") x
+          let mn = modname (const (fromFilePath $ mkname url))
+          tell [ mn ]
+          return $ mn ++ "/blobpage" ++ query
+        case e of
+          Left e -> do
+            fail $ printf "Error while parsing css %s: %s" src_name (show e)
+          Right b -> do
+            return (b, urls)
+    else
+      return (src_contents', [])
 
   -- Binary module
   let binfunc = printf "uw_%s_binary" (modname binmod)
@@ -636,6 +641,7 @@ bin' dir src_name src_contents' = do
     line $ "val geturl : url"
     forM_ jstypes $ \decl -> line (urtdecl decl)
     forM_ jsdecls $ \d -> line (urdecl d)
+    line $ "val propagated_urls : list url"
 
   toFile (wrapmod ".ur") $ do
     line $ "val binary = " ++ modname binmod ++ ".binary"
@@ -644,6 +650,10 @@ bin' dir src_name src_contents' = do
       line $ printf "val %s = %s.%s" (urname d) (modname jsmod) (urname d)
     line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mime
     line $ "val geturl = url(blobpage {})"
+    line $ "val propagated_urls = "
+    forM_ nurls $ \u -> do
+      line $ "    " ++ u ++ ".geturl ::"
+    line $ "    []"
 
   forM_ jsdecls $ \decl -> do
     addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
@@ -652,6 +662,8 @@ bin' dir src_name src_contents' = do
   safeGet (wrapmod ".ur") "blobpage"
   safeGet (wrapmod ".ur") "blob"
   module_ (pair $ wrapmod ".ur")
+  forM_ nurls $ \u -> do
+    module_ (pair $ fromFilePath $ u ++ ".ur")
 
   where
 
