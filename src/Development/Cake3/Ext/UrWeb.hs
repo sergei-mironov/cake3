@@ -150,9 +150,10 @@ urpPkgCfg (Urp _ _ hdr _) = foldl' scan [] hdr where
 
 data UrpState = UrpState {
     urpst :: Urp
+  , urautogen :: File
   } deriving (Show)
 
-defState urp = UrpState (Urp urp Nothing [] [])
+defState urp = UrpState (Urp urp Nothing [] []) (fromFilePath "autogen")
 
 class ToUrpWord a where
   toUrpWord :: a -> String
@@ -260,7 +261,7 @@ uwapp opts urpfile m = do
     unsafeShell [cmd|urweb $(string opts) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
   return $ UWExe u
 
-liftUrp m = m
+setAutogenDir d = modify $ \s -> s { urautogen = d }
 
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
 addMod m = modify $ \s -> let u = urpst s in s { urpst = u { umod = (umod u) ++ [m] } }
@@ -384,6 +385,176 @@ guessMime inf = fixup $ BS.unpack (defaultMimeLookup (fromString inf)) where
 
 pkgconfig :: (MonadMake m) => String -> UrpGen m ()
 pkgconfig l = addHdr $ UrpPkgConfig l
+
+
+type BinOptions = [ BinOption ]
+data BinOption = NoScan deriving(Show, Eq)
+
+
+bin :: (MonadIO m, MonadMake m) => File -> BinOptions -> UrpGen m ()
+bin src bo = do
+  c <- readFileForMake src
+  bin' (toFilePath src) c bo
+
+bin' :: (MonadIO m, MonadMake m) => FilePath -> BS.ByteString -> BinOptions -> UrpGen m ()
+bin' src_name src_contents' bo = do
+
+  dir <- urautogen `liftM` get
+
+  let mime = guessMime src_name
+  let mn = (mkname src_name)
+
+  let wrapmod ext = (dir </> mn) .= ext
+  let binmod ext = (dir </> (mn ++ "_c")) .= ext
+  let jsmod ext = (dir </> (mn ++ "_js")) .= ext
+
+  (src_contents, nurls) <-
+    if not (NoScan `elem` bo) then
+    if ((takeExtension src_name) == ".css") then do
+        (e,urls) <- return $ runWriter $ parse_css src_contents' $ \x -> do
+          let (url, query) = span (\c -> not $ elem c "?#") x
+          let mn = modname (const (fromFilePath $ mkname url))
+          tell [ mn ]
+          return $ mn ++ "/blobpage" ++ query
+        case e of
+          Left e -> do
+            fail $ printf "Error while parsing css %s: %s" src_name (show e)
+          Right b -> do
+            return (b, urls)
+    else
+      return (src_contents', [])
+    else
+      return (src_contents', [])
+
+  -- Binary module
+  let binfunc = printf "uw_%s_binary" (modname binmod)
+  let textfunc = printf "uw_%s_text" (modname binmod)
+  toFile (binmod ".c") $ do
+    line $ "/* Thanks, http://stupefydeveloper.blogspot.ru/2008/08/cc-embed-binary-data-into-elf.html */"
+    line $ "#include <urweb.h>"
+    line $ "#include <stdio.h>"
+    line $ printf "#define BLOBSZ %d" (BS.length src_contents)
+    line $ "static char blob[BLOBSZ];"
+    line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit)"
+    line $ "{"
+    line $ "  uw_Basis_blob uwblob;"
+    line $ "  uwblob.data = &blob[0];"
+    line $ "  uwblob.size = BLOBSZ;"
+    line $ "  return uwblob;"
+    line $ "}"
+    line $ ""
+    line $ "uw_Basis_string " ++ textfunc ++ " (uw_context ctx, uw_unit unit) {"
+    line $ "  char* data = &blob[0];"
+    line $ "  size_t size = sizeof(blob);"
+    line $ "  char * c = uw_malloc(ctx, size+1);"
+    line $ "  char * write = c;"
+    line $ "  int i;"
+    line $ "  for (i = 0; i < size; i++) {"
+    line $ "    *write =  data[i];"
+    line $ "    if (*write == '\\0')"
+    line $ "    *write = '\\n';"
+    line $ "    *write++;"
+    line $ "  }"
+    line $ "  *write=0;"
+    line $ "  return c;"
+    line $ "  }"
+    line $ ""
+
+  let append f wr = liftIO $ BS.appendFile f $ execWriter $ wr
+  append (toFilePath (binmod ".c")) $ do
+    let line s = tell ((BS.pack s)`mappend`(BS.pack "\n"))
+    line $ ""
+    line $ "static char blob[BLOBSZ] = {"
+    let buf = reverse $ BS.foldl (\a c -> (BS.pack (printf "0x%02X ," c)) : a) [] src_contents
+    tell (BS.concat buf)
+    line $ "};"
+    line $ ""
+
+  toFile (binmod ".h") $ do
+    line $ "#include <urweb.h>"
+    line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit);"
+    line $ "uw_Basis_string " ++ textfunc ++ " (uw_context ctx, uw_unit unit);"
+
+  toFile (binmod ".urs") $ do
+    line $ "val binary : unit -> transaction blob"
+    line $ "val text : unit -> transaction string"
+
+  include (binmod ".h")
+  csrc (binmod ".c")
+  ffi (binmod ".urs")
+
+  -- JavaScript FFI Module
+  (jstypes,jsdecls) <- 
+    if not (NoScan `elem` bo) then
+    if ((takeExtension src_name) == ".js") then do
+      e <- liftMake $ parse_js src_contents
+      case e of
+        Left e -> do
+          fail $ printf "Error while parsing javascript %s: %s" src_name e
+        Right decls -> do
+          return decls
+    else
+      return ([],[])
+    else
+      return ([],[])
+
+  forM_ jsdecls $ \decl -> do
+    addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
+  toFile (jsmod ".urs") $ do
+    forM_ jstypes $ \decl -> line (urtdecl decl)
+    forM_ jsdecls $ \decl -> line (urdecl decl)
+  ffi (jsmod ".urs")
+  
+  -- Wrapper module
+  toFile (wrapmod ".urs") $ do
+    line $ "val binary : unit -> transaction blob"
+    line $ "val text : unit -> transaction string"
+    line $ "val blobpage : unit -> transaction page"
+    line $ "val geturl : url"
+    forM_ jstypes $ \decl -> line (urtdecl decl)
+    forM_ jsdecls $ \d -> line (urdecl d)
+    line $ "val propagated_urls : list url"
+
+  toFile (wrapmod ".ur") $ do
+    line $ "val binary = " ++ modname binmod ++ ".binary"
+    line $ "val text = " ++ modname binmod ++ ".text"
+    forM_ jsdecls $ \d ->
+      line $ printf "val %s = %s.%s" (urname d) (modname jsmod) (urname d)
+    line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mime
+    line $ "val geturl = url(blobpage {})"
+    line $ "val propagated_urls = "
+    forM_ nurls $ \u -> do
+      line $ "    " ++ u ++ ".geturl ::"
+    line $ "    []"
+
+  safeGet (wrapmod ".ur") "blobpage"
+  safeGet (wrapmod ".ur") "blob"
+  module_ (pair $ wrapmod ".ur")
+
+
+  -- References to nested modules detected in the process of CSS scanning
+  forM_ nurls $ \u -> do
+    module_ (pair $ (dir </> u) .= "ur")
+
+  where
+
+    mkname :: FilePath -> String
+    mkname = upper1 . notnum . map under . takeFileName where
+      under c | c`elem`"_-. /" = '_'
+              | otherwise = c
+      upper1 [] = []
+      upper1 (x:xs) = (toUpper x) : xs
+      notnum n@(x:xs) | isDigit x = "f" ++ n
+                      | otherwise = n
+
+    modname :: (String -> File) -> String
+    modname f = upper1 . takeBaseName $ f ".urs" where
+      upper1 [] = []
+      upper1 (x:xs) = (toUpper x) : xs
+
+{-
+ - Content parsing helpers
+ -}
 
 data JSFunc = JSFunc {
     urdecl :: String -- ^ URS declaration for this function
@@ -532,154 +703,3 @@ parse_css inp f = do
             u' <- f u
             return (BS.pack $ "url ('" ++ u' ++ "')")
       return $ Right $ BS.concat b
-
-bin :: (MonadIO m, MonadMake m) => File -> File -> UrpGen m ()
-bin dir src = do
-  c <- readFileForMake src
-  bin' dir (toFilePath src) c
-
-bin' :: (MonadIO m, MonadMake m) => File -> FilePath -> BS.ByteString -> UrpGen m ()
-bin' dir src_name src_contents' = do
-
-  let mime = guessMime src_name
-  let mn = (mkname src_name)
-
-  let wrapmod ext = (dir </> mn) .= ext
-  let binmod ext = (dir </> (mn ++ "_c")) .= ext
-  let jsmod ext = (dir </> (mn ++ "_js")) .= ext
-
-  (src_contents, nurls) <-
-    if ((takeExtension src_name) == ".css") then do
-        (e,urls) <- return $ runWriter $ parse_css src_contents' $ \x -> do
-          let (url, query) = span (\c -> not $ elem c "?#") x
-          let mn = modname (const (fromFilePath $ mkname url))
-          tell [ mn ]
-          return $ mn ++ "/blobpage" ++ query
-        case e of
-          Left e -> do
-            fail $ printf "Error while parsing css %s: %s" src_name (show e)
-          Right b -> do
-            return (b, urls)
-    else
-      return (src_contents', [])
-
-  -- Binary module
-  let binfunc = printf "uw_%s_binary" (modname binmod)
-  let textfunc = printf "uw_%s_text" (modname binmod)
-  toFile (binmod ".c") $ do
-    line $ "/* Thanks, http://stupefydeveloper.blogspot.ru/2008/08/cc-embed-binary-data-into-elf.html */"
-    line $ "#include <urweb.h>"
-    line $ "#include <stdio.h>"
-    line $ printf "#define BLOBSZ %d" (BS.length src_contents)
-    line $ "static char blob[BLOBSZ];"
-    line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit)"
-    line $ "{"
-    line $ "  uw_Basis_blob uwblob;"
-    line $ "  uwblob.data = &blob[0];"
-    line $ "  uwblob.size = BLOBSZ;"
-    line $ "  return uwblob;"
-    line $ "}"
-    line $ ""
-    line $ "uw_Basis_string " ++ textfunc ++ " (uw_context ctx, uw_unit unit) {"
-    line $ "  char* data = &blob[0];"
-    line $ "  size_t size = sizeof(blob);"
-    line $ "  char * c = uw_malloc(ctx, size+1);"
-    line $ "  char * write = c;"
-    line $ "  int i;"
-    line $ "  for (i = 0; i < size; i++) {"
-    line $ "    *write =  data[i];"
-    line $ "    if (*write == '\\0')"
-    line $ "    *write = '\\n';"
-    line $ "    *write++;"
-    line $ "  }"
-    line $ "  *write=0;"
-    line $ "  return c;"
-    line $ "  }"
-    line $ ""
-
-  let append f wr = liftIO $ BS.appendFile f $ execWriter $ wr
-  append (toFilePath (binmod ".c")) $ do
-    let line s = tell ((BS.pack s)`mappend`(BS.pack "\n"))
-    line $ ""
-    line $ "static char blob[BLOBSZ] = {"
-    let buf = reverse $ BS.foldl (\a c -> (BS.pack (printf "0x%02X ," c)) : a) [] src_contents
-    tell (BS.concat buf)
-    line $ "};"
-    line $ ""
-
-  toFile (binmod ".h") $ do
-    line $ "#include <urweb.h>"
-    line $ "uw_Basis_blob " ++ binfunc ++ " (uw_context ctx, uw_unit unit);"
-    line $ "uw_Basis_string " ++ textfunc ++ " (uw_context ctx, uw_unit unit);"
-
-  toFile (binmod ".urs") $ do
-    line $ "val binary : unit -> transaction blob"
-    line $ "val text : unit -> transaction string"
-
-  include (binmod ".h")
-  csrc (binmod ".c")
-  ffi (binmod ".urs")
-
-  -- JavaScript FFI Module
-  (jstypes,jsdecls) <- if ((takeExtension src_name) == ".js") then do
-                          e <- liftMake $ parse_js src_contents
-                          case e of
-                            Left e -> do
-                              fail $ printf "Error while parsing javascript %s: %s" src_name e
-                            Right decls -> do
-                              return decls
-                       else
-                          return ([],[])
-
-  toFile (jsmod ".urs") $ do
-    forM_ jstypes $ \decl -> line (urtdecl decl)
-    forM_ jsdecls $ \decl -> line (urdecl decl)
-  
-  -- Wrapper module
-  toFile (wrapmod ".urs") $ do
-    line $ "val binary : unit -> transaction blob"
-    line $ "val text : unit -> transaction string"
-    line $ "val blobpage : unit -> transaction page"
-    line $ "val geturl : url"
-    forM_ jstypes $ \decl -> line (urtdecl decl)
-    forM_ jsdecls $ \d -> line (urdecl d)
-    line $ "val propagated_urls : list url"
-
-  toFile (wrapmod ".ur") $ do
-    line $ "val binary = " ++ modname binmod ++ ".binary"
-    line $ "val text = " ++ modname binmod ++ ".text"
-    forM_ jsdecls $ \d ->
-      line $ printf "val %s = %s.%s" (urname d) (modname jsmod) (urname d)
-    line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mime
-    line $ "val geturl = url(blobpage {})"
-    line $ "val propagated_urls = "
-    forM_ nurls $ \u -> do
-      line $ "    " ++ u ++ ".geturl ::"
-    line $ "    []"
-
-  forM_ jsdecls $ \decl -> do
-    addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
-  ffi (jsmod ".urs")
-
-  safeGet (wrapmod ".ur") "blobpage"
-  safeGet (wrapmod ".ur") "blob"
-  module_ (pair $ wrapmod ".ur")
-  forM_ nurls $ \u -> do
-    module_ (pair $ fromFilePath $ u ++ ".ur")
-
-  where
-
-    mkname :: FilePath -> String
-    mkname = upper1 . notnum . map under . takeFileName where
-      under c | c`elem`"_-. /" = '_'
-              | otherwise = c
-      upper1 [] = []
-      upper1 (x:xs) = (toUpper x) : xs
-      notnum n@(x:xs) | isDigit x = "f" ++ n
-                      | otherwise = n
-
-    modname :: (String -> File) -> String
-    modname f = upper1 . takeBaseName $ f ".urs" where
-      upper1 [] = []
-      upper1 (x:xs) = (toUpper x) : xs
-

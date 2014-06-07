@@ -49,6 +49,7 @@ data Args = A
   { tgtdir :: FilePath
   , fversion :: Bool
   , dontrunmake :: Bool
+  , dontscan :: Bool
   , files :: [FilePath]
   }
 
@@ -62,6 +63,7 @@ pargs = A
       <> value "")
   <*> flag False True ( long "version" <> help "Show version information" )
   <*> flag False True ( long "dont-run-make" <> help "Do not run the makefile generated" )
+  <*> flag False True ( long "dont-scan" <> help "Do not generate JS/CSS FFI declarations" )
   <*> arguments str ( metavar "FILE" <> help "File to embed" )
 
 main :: IO ()
@@ -74,10 +76,10 @@ main = do
       <> header "UrEmebed is the Ur/Web module generator" ))
 
 
-main_ (A tgturp True drm ins) = do
+main_ (A tgturp True drm ds ins) = do
   hPutStrLn stderr $ "urembed version " ++ (show version)
 
-main_ (A tgturp False drm ins) = do
+main_ (A tgturp False drm ds ins) = do
   let tgtdir = takeDirectory tgturp
 
   when (null tgtdir) $ do
@@ -85,11 +87,6 @@ main_ (A tgturp False drm ins) = do
 
   when (null ins) $ do
     fail "At least one file should be specified, see --help"
-
-  -- exists <- doesDirectoryExist tgtdir
-  -- when (not exists) $ do
-  --   fail $ "Couldn't create output file, no such directory " ++ show tgtdir
-  liftIO $ createDirectoryIfMissing True tgtdir
 
   when (null tgtdir) $ do
     fail "An output directory should be specified, use -o"
@@ -99,17 +96,20 @@ main_ (A tgturp False drm ins) = do
 
   cntnts <- mapM BS.readFile ins
 
+  -- Create target directory earlier
+  createDirectoryIfMissing True tgtdir
   setCurrentDirectory tgtdir
+
   loc <- currentDirLocation
   let file = file' loc
-  let bin = bin' (file ".")
 
   let mk = (("." </> takeFileName tgturp) .= "mk")
   writeMake (file mk) $ do
     let urp = file (takeFileName tgturp)
     u <- uwlib urp $ do
+      setAutogenDir (file ".")
       forM_ (ins`zip`cntnts) $ \(i,c) -> do
-        bin i c
+        bin' i c (if ds then [NoScan] else [])
     rule $ do
       phony "all"
       depend u
