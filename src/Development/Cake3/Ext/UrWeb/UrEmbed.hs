@@ -94,7 +94,6 @@ main_ (A tgturp False drm ds ins) = do
   when (null ins) $ do
     fail "At least one file should be specified, see --help"
 
-  cntnts <- mapM BS.readFile ins
 
   -- Create target directory earlier
   createDirectoryIfMissing True tgtdir
@@ -108,7 +107,8 @@ main_ (A tgturp False drm ds ins) = do
     let urp = file (takeFileName tgturp)
     u <- uwlib urp $ do
       setAutogenDir (file ".")
-      forM_ (ins`zip`cntnts) $ \(i,c) -> do
+      forM_ ins $ \i -> do
+        c <- liftIO $ BS.readFile i
         bin' i c (if ds then [NoScan] else [])
     rule $ do
       phony "all"

@@ -401,7 +401,7 @@ bin' src_name src_contents' bo = do
 
   dir <- urautogen `liftM` get
 
-  let mime = guessMime src_name
+  let mm = guessMime src_name
   let mn = (mkname src_name)
 
   let wrapmod ext = (dir </> mn) .= ext
@@ -420,7 +420,7 @@ bin' src_name src_contents' bo = do
           Left e -> do
             fail $ printf "Error while parsing css %s: %s" src_name (show e)
           Right b -> do
-            return (b, urls)
+            return (b, L.nub urls)
     else
       return (src_contents', [])
     else
@@ -520,21 +520,18 @@ bin' src_name src_contents' bo = do
     line $ "val text = " ++ modname binmod ++ ".text"
     forM_ jsdecls $ \d ->
       line $ printf "val %s = %s.%s" (urname d) (modname jsmod) (urname d)
-    line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mime
+    line $ printf "fun blobpage {} = b <- binary () ; returnBlob b (blessMime \"%s\")" mm
     line $ "val geturl = url(blobpage {})"
     line $ "val propagated_urls = "
     forM_ nurls $ \u -> do
       line $ "    " ++ u ++ ".geturl ::"
     line $ "    []"
 
+  allow mime mm
   safeGet (wrapmod ".ur") "blobpage"
   safeGet (wrapmod ".ur") "blob"
+
   module_ (pair $ wrapmod ".ur")
-
-
-  -- References to nested modules detected in the process of CSS scanning
-  forM_ nurls $ \u -> do
-    module_ (pair $ (dir </> u) .= "ur")
 
   where
 
@@ -703,3 +700,4 @@ parse_css inp f = do
             u' <- f u
             return (BS.pack $ "url ('" ++ u' ++ "')")
       return $ Right $ BS.concat b
+
