@@ -295,6 +295,16 @@ library (UWLib u) = library' $ do
   return [urp u]
 
 -- | Build a file using external Makefile facility.
+externalMake3 ::
+     File -- ^ External Makefile
+  -> File -- ^ External file to refer to
+  -> String -- ^ The name of the target to run
+  -> Make [File]
+externalMake3 mk f tgt = do
+  prebuild [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk) $(string tgt) |]
+  return [f]
+
+-- | Build a file using external Makefile facility.
 externalMake' ::
      File -- ^ External Makefile
   -> File -- ^ External file to refer to
@@ -304,11 +314,19 @@ externalMake' mk f = do
   return [f]
 
 -- | Build a file from external project. It is expected, that this project has a
--- 'Makwfile' in it's root directory
+-- 'Makwfile' in it's root directory. Call Makefile with the default target
 externalMake ::
      File -- ^ File from the external project to build
   -> Make [File]
-externalMake f = externalMake' (takeDirectory f </> "Makefile") f
+externalMake f = externalMake3 (takeDirectory f </> "Makefile") f ""
+
+-- | Build a file from external project. It is expected, that this project has a
+-- 'Makwfile' in it's root directory
+externalMakeTarget ::
+     File -- ^ File from the external project to build
+  -> String
+  -> Make [File]
+externalMakeTarget f tgt = externalMake3 (takeDirectory f </> "Makefile") f tgt
 
 -- | Build a file from external project. It is expected, that this project has a
 -- fiel.mk (a Makefile with an unusual name) in it's root directory
