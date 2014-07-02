@@ -240,14 +240,12 @@ buildMake ms = do
       produce (queryTargets (recipes ms))
       unsafeShell [cmd|-mkdir .cake3|]
       commands (rcmd $ prebuilds ms)
-      unsafeShell [cmd|$(make) -f $(outputFile ms) $(makecmdgoals)|]
+      unsafeShell [cmd|MAIN=1 $(make) -f $(outputFile ms) $(makecmdgoals)|]
       commands (rcmd $ postbuilds ms)
       markPhony
 
     line ""
     line "# Prebuild/postbuild section"
-    line ""
-    line "export MAIN=1" 
     line ""
 
     case hasClean (recipes ms) of
