@@ -411,6 +411,7 @@ data BinOption = NoScan | UseUrembed deriving(Show, Eq)
 
 bin :: (MonadIO m, MonadMake m) => File -> BinOptions -> UrpGen m ()
 bin src bo = do
+  let ds = if NoScan `elem` bo then "--dont-scan" else ""
   case UseUrembed `elem` bo of
     False -> do
       c <- readFileForMake src
@@ -418,7 +419,7 @@ bin src bo = do
     True -> do
       a <- urautogen `liftM` get
       library' $ do
-        rule $ shell [cmd|urembed -o @(a </> (takeFileName src .="urp")) $src|]
+        rule $ shell [cmd|urembed -o @(a </> (takeFileName src .="urp")) $(string ds) $src|]
 
 bin' :: (MonadIO m, MonadMake m) => FilePath -> BS.ByteString -> BinOptions -> UrpGen m ()
 bin' src_name src_contents' bo = do
