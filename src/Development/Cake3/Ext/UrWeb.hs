@@ -439,7 +439,7 @@ bin' src_name src_contents' bo = do
           let (url, query) = span (\c -> not $ elem c "?#") x
           let mn = modname (const (fromFilePath $ mkname url))
           tell [ mn ]
-          return $ mn ++ "/blobpage" ++ query
+          return $ "/" ++ mn ++ "/blobpage" ++ query
         case e of
           Left e -> do
             fail $ printf "Error while parsing css %s: %s" src_name (show e)
@@ -678,7 +678,8 @@ transform_css = do
 
     string  = lexeme (
       between (char '\'') (char '\'') (strchars '\'') <|>
-      between (char '"') (char '"') (strchars '"'))
+      between (char '"') (char '"') (strchars '"')) <|>
+      manyTill anyChar (try (char ')'))
       where
         strchars e = many $ satisfy (/=e)
 
@@ -722,6 +723,6 @@ parse_css inp f = do
           Left bs -> return bs
           Right u -> do
             u' <- f u
-            return (BS.pack $ "url ('" ++ u' ++ "')")
+            return (BS.pack $ "url('" ++ u' ++ "')")
       return $ Right $ BS.concat b
 
