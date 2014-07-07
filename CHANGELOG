@@ -1,3 +1,7 @@
+Version 0.5.1.0
+---------------
+Fix urembed tool, change UrWeb.bin API, converts url's from the CSS to Ur/Web format
+
 Version 0.4
 -----------
 Autobuild 'clean' rule. genFile and genTmpFile functions allowing to embed text
