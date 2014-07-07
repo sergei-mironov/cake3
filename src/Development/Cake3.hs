@@ -43,6 +43,7 @@ module Development.Cake3 (
   , readFileForMake
   , genFile
   , genTmpFile
+  , genTmpFileWithPrefix
 
   -- Make parts
   , prerequisites
@@ -186,6 +187,8 @@ genFile tgt cnt = rule' $do
     quote_dollar (c:cs) = c : (quote_dollar cs)
 
 genTmpFile :: (MonadMake m) => String -> m File
-genTmpFile cnt = tmpFile >>= \f -> genFile f cnt
+genTmpFile cnt = tmpFile [] >>= \f -> genFile f cnt
 
+genTmpFileWithPrefix :: (MonadMake m) => String -> String -> m File
+genTmpFileWithPrefix pfx cnt = tmpFile pfx >>= \f -> genFile f cnt
 

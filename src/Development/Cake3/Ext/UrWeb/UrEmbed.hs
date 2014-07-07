@@ -97,16 +97,16 @@ main_ (A tgturp False drm ds ins) = do
 
   -- Create target directory earlier
   createDirectoryIfMissing True tgtdir
-  setCurrentDirectory tgtdir
+  -- setCurrentDirectory tgtdir
 
   loc <- currentDirLocation
   let file = file' loc
 
-  let mk = (("." </> takeFileName tgturp) .= "mk")
+  let mk = (tgturp .= "mk")
   writeMake (file mk) $ do
-    let urp = file (takeFileName tgturp)
+    let urp = file tgturp
     u <- uwlib urp $ do
-      setAutogenDir (file ".")
+      -- setAutogenDir (file "autogen2")
       forM_ ins $ \i -> do
         c <- liftIO $ BS.readFile i
         bin' i c (if ds then [NoScan] else [])

@@ -207,7 +207,7 @@ toFile f' wr = liftIO $ do
   createDirectoryIfMissing True (takeDirectory f)
   writeFile f $ execWriter $ wr
 
-toTmpFile wr = genTmpFile $ execWriter $ wr
+toTmpFile pfx wr = genTmpFileWithPrefix pfx $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
@@ -230,7 +230,7 @@ uwlib urpfile m = do
         ".c" -> shell [cmd| $cc -c $i $incfl $(string flags) -o @(c .= "o") $(c) |]
         e -> error ("Unknown C-source extension " ++ e)
 
-  inp_in <- toTmpFile $ do
+  inp_in <- toTmpFile (takeFileName (urpfile .= "in")) $ do
       forM hdr (line . toUrpLine (urpUp urpfile))
       line ""
       forM mod (line . toUrpLine (urpUp urpfile))
@@ -406,13 +406,19 @@ pkgconfig l = addHdr $ UrpPkgConfig l
 
 
 type BinOptions = [ BinOption ]
-data BinOption = NoScan deriving(Show, Eq)
+data BinOption = NoScan | UseUrembed deriving(Show, Eq)
 
 
 bin :: (MonadIO m, MonadMake m) => File -> BinOptions -> UrpGen m ()
 bin src bo = do
-  c <- readFileForMake src
-  bin' (toFilePath src) c bo
+  case UseUrembed `elem` bo of
+    False -> do
+      c <- readFileForMake src
+      bin' (toFilePath src) c bo
+    True -> do
+      a <- urautogen `liftM` get
+      library' $ do
+        rule $ shell [cmd|urembed -o @(a </> (takeFileName src .="urp")) $src|]
 
 bin' :: (MonadIO m, MonadMake m) => FilePath -> BS.ByteString -> BinOptions -> UrpGen m ()
 bin' src_name src_contents' bo = do
@@ -470,7 +476,7 @@ bin' src_name src_contents' bo = do
     line $ "  for (i = 0; i < size; i++) {"
     line $ "    *write =  data[i];"
     line $ "    if (*write == '\\0')"
-    line $ "    *write = '\\n';"
+    line $ "      *write = '\\n';"
     line $ "    *write++;"
     line $ "  }"
     line $ "  *write=0;"

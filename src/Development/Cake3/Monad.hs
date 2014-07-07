@@ -86,11 +86,11 @@ addPlacement pos r = modify $ \ms -> ms { placement = r`insertInto`(placement ms
 addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
-tmpFile :: (MonadMake m) => m File
-tmpFile = liftMake $ do
+tmpFile :: (MonadMake m) => String -> m File
+tmpFile pfx = liftMake $ do
   s <- get
   put s{tmpIndex = (tmpIndex s)+1}
-  return (fromFilePath (".cake3" </> ("tmp"++(show (tmpIndex s)))))
+  return (fromFilePath (".cake3" </> ("tmp"++ pfx ++ (show (tmpIndex s)))))
 
 -- | Add prebuild command
 prebuild, postbuild :: (MonadMake m) => CommandGen -> m ()
