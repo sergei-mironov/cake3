@@ -64,7 +64,7 @@ pargs = A
   <*> flag False True ( long "version" <> help "Show version information" )
   <*> flag False True ( long "dont-run-make" <> help "Do not run the makefile generated" )
   <*> flag False True ( long "dont-scan" <> help "Do not generate JS/CSS FFI declarations" )
-  <*> arguments str ( metavar "FILE" <> help "File to embed" )
+  <*> many (argument str ( metavar "FILE" <> help "File to embed" ))
 
 main :: IO ()
 main = do
