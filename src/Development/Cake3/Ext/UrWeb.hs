@@ -207,7 +207,7 @@ toFile f' wr = liftIO $ do
   createDirectoryIfMissing True (takeDirectory f)
   writeFile f $ execWriter $ wr
 
-toTmpFile pfx wr = genTmpFileWithPrefix pfx $ execWriter $ wr
+mkFileRule pfx wr = genFile (tmp_file pfx) $ execWriter $ wr
 
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
@@ -230,7 +230,7 @@ uwlib urpfile m = do
         ".c" -> shell [cmd| $cc -c $i $incfl $(string flags) -o @(c .= "o") $(c) |]
         e -> error ("Unknown C-source extension " ++ e)
 
-  inp_in <- toTmpFile (takeFileName (urpfile .= "in")) $ do
+  inp_in <- mkFileRule (takeFileName (urpfile .= "in")) $ do
       forM hdr (line . toUrpLine (urpUp urpfile))
       line ""
       forM mod (line . toUrpLine (urpUp urpfile))
