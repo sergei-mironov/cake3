@@ -132,7 +132,7 @@ CWD=`pwd`
 T=`mktemp -d`
 
 cakes() {
-  find -type f '(' -name 'Cake*\.hs' -or -name 'Cake*\.lhs' \
+  find -L -type f '(' -name 'Cake*\.hs' -or -name 'Cake*\.lhs' \
                -or -name '*Cake\.hs' -or -name '*Cake\.lhs' ')' \
                -and -not -name '*_P.hs' \
     | grep -v '^\.[a-zA-Z].*' \
