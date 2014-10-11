@@ -43,6 +43,7 @@ class FileLike a where
   takeExtensions :: a -> String
   dropExtensions :: a -> a
   dropExtension :: a -> a
+  splitDirectories :: a -> [String]
 
 -- | Redefine standard @</>@ operator to work with Files
 (</>) :: (FileLike a) => a -> String -> a
@@ -64,6 +65,7 @@ instance FileLike a => FileLike (FileT a) where
   takeDirectory (FileT a) = FileT (takeDirectory a)
   dropExtensions (FileT a) = FileT (dropExtensions a)
   dropExtension (FileT a) = FileT (dropExtension a)
+  splitDirectories (FileT a) = splitDirectories a
 
 instance FileLike FilePath where
   -- fromFilePath = id
@@ -77,4 +79,5 @@ instance FileLike FilePath where
   takeExtensions = F.takeExtensions
   dropExtensions = F.dropExtensions
   dropExtension = F.dropExtension
+  splitDirectories = F.splitDirectories
 
