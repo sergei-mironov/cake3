@@ -48,7 +48,7 @@ import Development.Cake3 hiding (many, (<|>))
 data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
   deriving(Show,Data,Typeable)
 
-data UrpRewrite = UrpStyle | UrpAll
+data UrpRewrite = UrpStyle | UrpAll | UrpTable
   deriving(Show,Data,Typeable)
 
 data UrpHdrToken = UrpDatabase String
@@ -168,6 +168,7 @@ instance ToUrpWord UrpAllow where
 instance ToUrpWord UrpRewrite where
   toUrpWord (UrpStyle) = "style"
   toUrpWord (UrpAll) = "all"
+  toUrpWord (UrpTable) = "table"
 
 class ToUrpLine a where
   toUrpLine :: FilePath -> a -> String
@@ -395,6 +396,8 @@ mime = UrpMime
 style = UrpStyle
 
 all = UrpAll
+
+table = UrpTable
 
 env = UrpEnvVar
 
