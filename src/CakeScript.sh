@@ -132,11 +132,12 @@ CWD=`pwd`
 T=`mktemp -d`
 
 cakes() {
-  find -L -type f '(' -name 'Cake*\.hs' -or -name 'Cake*\.lhs' \
-               -or -name '*Cake\.hs' -or -name '*Cake\.lhs' ')' \
-               -and -not -name '*_P.hs' \
-    | grep -v '^\.[a-zA-Z].*' \
-    | sort
+  for l in `seq 1 1 10`; do
+    find -L -mindepth $l -maxdepth $l -type f '(' -name 'Cake*\.hs' -or -name 'Cake*\.lhs' \
+       -or -name '*Cake\.hs' -or -name '*Cake\.lhs' ')' \
+       -and -not -name '*_P.hs' | sort
+  done \
+  | grep -v '^\.[a-zA-Z].*'
 }
 
 OIFS=$IFS
