@@ -65,6 +65,7 @@ data UrpHdrToken = UrpDatabase String
                  | UrpJSFunc String String String -- ^ Module name, UrWeb name, JavaScript name
                  | UrpSafeGet String
                  | UrpScript String
+                 | UrpClientOnly String
   deriving(Show,Data,Typeable)
 
 data UrpModToken
@@ -193,6 +194,7 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
   toUrpLine up (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
   toUrpLine up (UrpScript s) = printf "script %s" s
+  toUrpLine up (UrpClientOnly s) = printf "clientOnly %s" s
   toUrpLine up e = error $ "toUrpLine: unhandled case " ++ (show e)
 
 instance ToUrpLine UrpModToken where
@@ -538,6 +540,7 @@ bin' src_name src_contents' bo = do
 
   forM_ jsdecls $ \decl -> do
     addHdr $ UrpJSFunc (modname jsmod) (urname decl) (jsname decl)
+    addHdr $ UrpClientOnly $ (modname jsmod) ++ "." ++ (urname decl)
   toFile (jsmod ".urs") $ do
     forM_ jstypes $ \decl -> line (urtdecl decl)
     forM_ jsdecls $ \decl -> line (urdecl decl)
