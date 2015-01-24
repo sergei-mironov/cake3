@@ -2,6 +2,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module Development.Cake3.Writer (defaultMakefile,buildMake) where
 
 import Control.Applicative

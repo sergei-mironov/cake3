@@ -16,7 +16,7 @@ import Data.Set (Set)
 
 import System.FilePath.Wrapper
 
--- | The representation of Makefile variable
+-- | The representation of Makefile variable.
 data Variable = Variable {
     vname :: String
   -- ^ The name of a variable
@@ -25,7 +25,13 @@ data Variable = Variable {
   -- environment)
   } deriving(Show, Eq, Ord, Data, Typeable)
 
--- type Vars = Map String (Set Variable)
+
+-- | The representation a tool used by the Makefile's recipe. Typical example
+-- are 'gcc' or 'bison'
+data Tool = Tool {
+    tname :: String
+  -- ^ Name of tool.
+  } deriving(Show, Eq, Ord, Data, Typeable)
 
 -- | Command represents OS command line and consists of a list of fragments.
 -- Each fragment is either text (may contain spaces) or FilePath (spaces should
@@ -52,13 +58,18 @@ data Recipe = Recipe {
   , rcmd :: [Command]
   -- ^ A list of shell commands
   , rvars :: Set Variable
-  -- ^ Container of variables
+  -- ^ A set of variables employed in the recipe. The target Makefile should
+  -- notice changes in those variables and rebuild the targets
+  , rtools :: Set Tool
+  -- ^ A set of tools employed in the recipe. Make
   , rloc :: String
+  -- ^ Location (probably, doesn't function)
   , rflags :: Set Flag
+  -- ^ Set of flags (Makefile-specific)
   } deriving(Show, Eq, Ord, Data, Typeable)
 
 emptyRecipe :: String -> Recipe
-emptyRecipe loc = Recipe mempty mempty mempty mempty loc mempty
+emptyRecipe loc = Recipe mempty mempty mempty mempty mempty loc mempty
 
 addPrerequisites :: Set File -> Recipe -> Recipe
 addPrerequisites p r = r { rsrc = p`mappend`(rsrc r)}
@@ -115,18 +126,23 @@ queryTargets rs = foldl' (\a r -> a`mappend`(rtgt r)) mempty rs
 var :: String -> Maybe String -> Variable
 var n v = Variable n v
 
--- | Declare the variable which is defined in the current Makefile and has it's
--- default value
+tool :: String -> Tool
+tool = Tool
+
+-- | Define the Makefile-level variable. Rules, referring to a variable,
+-- 'notice' it's changes.
 makevar
   :: String -- ^ Variable name
   -> String -- ^ Default value
   -> Variable
 makevar n v = var n (Just v)
 
--- | Declare the variable which is not defined in the target Makefile
+-- | Declare the variable defined elsewhere. Typycally, environment variables
+-- may be decalred with this functions. Variables are tracked by the cake3.
+-- Rules, referring to a variable, 'notice' it's changes.
 extvar :: String -> Variable
 extvar n = var n Nothing
 
--- | Special variable @$(MAKE)@
+-- | Reref to special variable @$(MAKE)@
 make = extvar "MAKE"
 

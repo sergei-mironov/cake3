@@ -53,7 +53,7 @@ data MakeState = MS {
   , postbuilds :: Recipe
     -- ^ Postbuild commands.
   , recipes :: Set Recipe
-    -- ^ The set of recipes
+    -- ^ The set of recipes, to be checked and renderd as a Makefile
   , sloc :: Location
     -- ^ Current location. FIXME: fix or remove
   , makeDeps :: Set File
@@ -105,14 +105,14 @@ checkForEmptyTarget :: (Foldable f) => f Recipe -> String
 checkForEmptyTarget rs = foldl' checker mempty rs where
   checker es r | S.null (rtgt r) = es++e
                | otherwise = es where
-    e = printf "Error: Recipe without targets\n\t%s\n" (show r)
+    e = printf "Error: Recipe without any targets:\n\t%s\n" (show r)
 
 -- | Find recipes sharing a target
 checkForTargetConflicts :: (Foldable f) => f Recipe -> String
 checkForTargetConflicts rs = foldl' checker mempty (groupRecipes rs) where
   checker es rs | S.size rs > 1 = es++e
                 | otherwise = es where
-    e = printf "Error: Recipes share one or more targets\n\t%s\n" (show rs)
+    e = printf "Error: Recipes share one or more targets:\n\t%s\n" (show rs)
 
 
 -- | A Monad providing access to MakeState. TODO: not mention IO here.
@@ -307,8 +307,8 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
     Nothing -> return mempty
     Just x -> refOutput x
 
--- | Class of things which may be referenced using '\$(expr)' from inside
--- of quasy-quoted shell expressions
+-- | Class of things which may be referenced using '\$(expr)' syntax of the
+-- quasy-quoted shell expressions
 class (MonadAction a m) => RefInput a m x where
   -- | Register the input item, return it's shell-script representation
   refInput :: x -> a Command
@@ -346,6 +346,11 @@ instance (MonadAction a m) => RefInput a m Variable where
     variables [v]
     return_text $ printf "$(%s)" n
 
+instance (MonadAction a m) => RefInput a m Tool where
+  refInput t@(Tool x) = liftAction $ do
+    tools [t]
+    return_text x
+
 instance (MonadAction a m) => RefInput a m CakeString where
   refInput v@(CakeString s) = do
     return_text s
@@ -366,11 +371,17 @@ produce :: (RefOutput m x)
   -> A' m ()
 produce x = refOutput x >> return ()
 
--- | Add variables to the list of variables referenced by the current recipe
+-- | Add variables @vs@ to tracking list of the current recipe
 variables :: (Foldable t, Monad m)
   => (t Variable) -- ^ A set of variables to depend the recipe on
   -> A' m ()
 variables vs = modify (\r -> r { rvars = foldl' (\a v -> S.insert v a) (rvars r) vs } )
+
+-- | Add tools @ts@ to the tracking list of the current recipe
+tools :: (Foldable t, Monad m)
+  => (t Tool) -- ^ A set of tools used by this recipe
+  -> A' m ()
+tools ts = modify (\r -> r { rtools = foldl' (\a v -> S.insert v a) (rtools r) ts } )
 
 -- | Add commands to the list of commands of a current recipe under
 -- construction. Warning: this function behaves like unsafeShell i.e. it doesn't

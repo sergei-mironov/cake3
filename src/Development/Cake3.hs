@@ -96,6 +96,8 @@ currentDirLocation = do
   cwd <- liftIO $ getCurrentDirectory
   return $ ProjectLocation cwd cwd
 
+-- | Converts string representation of Path into type-safe File. Internally,
+-- files are stored as a relative offsets from the project root directory
 file' :: ProjectLocation -> String -> File
 file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
   rel = makeRelative (root pl) ((off pl) </> f)
