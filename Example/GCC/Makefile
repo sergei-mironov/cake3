@@ -29,8 +29,6 @@ else
 
 # Prebuild/postbuild section
 
-export MAIN=1
-
 ifneq ($(MAKECMDGOALS),clean)
 
 .PHONY: all
@@ -51,7 +49,7 @@ all: .fix-multy1
 	@echo "*****************"
 	@echo "THE CAKE3 EXAMPLE"
 	@echo "*****************"
-	$(MAKE) -f ./Makefile $(MAKECMDGOALS)
+	MAIN=1 $(MAKE) -f ./Makefile $(MAKECMDGOALS)
 
 endif
 .PHONY: clean

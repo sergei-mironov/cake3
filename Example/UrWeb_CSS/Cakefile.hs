@@ -17,7 +17,7 @@ project = do
       allow mime "text/javascript";
       allow mime "text/css";
       debug
-      bin "autogen" "bootstrap.css"
+      bin "bootstrap.css" [NoScan]
       ur (single "Main.ur")
 
   return ()
