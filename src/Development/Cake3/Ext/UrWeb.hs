@@ -287,21 +287,21 @@ rewrite a s = addHdr $ UrpRewrite a s
 urpUp :: File -> FilePath
 urpUp f = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory $ toFilePath f
 
--- | A general method of including a library into the UrWeb project.
-library' :: (MonadMake m)
-  => Make [File] -- ^ A monadic action, returning a list of libraries to include
-  -> UrpGen m ()
-library' ml = do
-  ls <- liftMake ml
-  forM_ ls $ \l -> do
-    when ((takeExtension l) /= ".urp") $ do
-      fail $ printf "library declaration for %s should ends with '.urp'" (toFilePath l)
-    addHdr $ UrpLibrary l
+class LibraryLike x where
+  library :: (MonadMake m) => x -> UrpGen m ()
 
--- | Include a library defined somewhere in the current project
-library :: (MonadMake m) => UWLib -> UrpGen m ()
-library (UWLib u) = library' $ do
-  return [urp u]
+instance LibraryLike [File] where
+  library  ls = do
+    forM_ ls $ \l -> do
+      when ((takeExtension l) /= ".urp") $ do
+        fail $ printf "library declaration '%s' should ends with '.urp'" (toFilePath l)
+      addHdr $ UrpLibrary l
+
+instance LibraryLike UWLib where
+  library (UWLib u) = library [urp u]
+
+instance LibraryLike x => LibraryLike (Make x) where
+  library  ml = liftMake ml >>= library
 
 -- | Build a file using external Makefile facility.
 externalMake3 ::
@@ -310,7 +310,7 @@ externalMake3 ::
   -> String -- ^ The name of the target to run
   -> Make [File]
 externalMake3 mk f tgt = do
-  prebuild [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk) $(string tgt) |]
+  prebuildS [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk) $(string tgt) |]
   return [f]
 
 -- | Build a file using external Makefile facility.
@@ -319,7 +319,7 @@ externalMake' ::
   -> File -- ^ External file to refer to
   -> Make [File]
 externalMake' mk f = do
-  prebuild [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk)|]
+  prebuildS [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk)|]
   return [f]
 
 -- | Build a file from external project. It is expected, that this project has a
@@ -433,7 +433,7 @@ bin src bo = do
       bin' (toFilePath src) c bo
     True -> do
       a <- urautogen `liftM` get
-      library' $ do
+      library $ do
         rule $ shell [cmd|urembed -o @(a </> (takeFileName src .="urp")) $(string ds) $src|]
 
 bin' :: (MonadIO m, MonadMake m) => FilePath -> BS.ByteString -> BinOptions -> UrpGen m ()

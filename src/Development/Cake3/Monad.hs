@@ -52,6 +52,10 @@ data MakeState = MS {
     -- commands are executed before any target
   , postbuilds :: Recipe
     -- ^ Postbuild commands.
+  , prebuildsS :: Set Command
+    -- ^ Prebuild commands stored in a Set. Reactive-style-friendly.
+  , postbuildsS :: Set Command
+    -- ^ Postbuild commands stored in a Set. Reactive-style-friendly.
   , recipes :: Set Recipe
     -- ^ The set of recipes, to be checked and renderd as a Makefile
   , sloc :: Location
@@ -75,8 +79,9 @@ data MakeState = MS {
   }
 
 -- Oh, such a boilerplate
-initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf mempty where
-  defr = emptyRecipe "<internal>"
+initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mempty mempty mf mempty
+
+defr = emptyRecipe "<internal>"
 
 getPlacementPos :: Make Int
 getPlacementPos = L.length <$> placement <$> get
@@ -91,16 +96,27 @@ addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 tmp_file :: String -> File
 tmp_file pfx = (fromFilePath (".cake3" </> ("tmp_"++ pfx )))
 
+prebuild, postbuild, prebuildS, postbuildS :: (MonadMake m) => CommandGen -> m ()
+
 -- | Add prebuild command
-prebuild, postbuild :: (MonadMake m) => CommandGen -> m ()
 prebuild cmdg = liftMake $ do
   s <- get
   pb <- fst <$> runA' (prebuilds s) (shell cmdg)
   put s { prebuilds = pb }
+
+prebuildS cmdg = liftMake $ do
+  r <- fst <$> runA' defr (shell cmdg)
+  modify (\ms -> ms { prebuildsS = (S.fromList $ rcmd r) `mappend` (prebuildsS ms)})
+
+-- | Add postbuild command
 postbuild cmdg = liftMake $ do
   s <- get
   pb <- fst <$> runA' (postbuilds s) (shell cmdg)
   put s { postbuilds = pb }
+
+postbuildS cmdg = liftMake $ do
+  r <- fst <$> runA' defr (shell cmdg)
+  modify (\ms -> ms { postbuildsS = (S.fromList $ rcmd r) `mappend` (postbuildsS ms)})
 
 -- | Find recipes without targets. Empty result means 'No errors'
 checkForEmptyTarget :: (Foldable f) => f Recipe -> String

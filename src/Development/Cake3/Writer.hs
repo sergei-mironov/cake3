@@ -228,8 +228,10 @@ buildMake ms = do
       produce (queryTargets (recipes ms))
       unsafeShell [cmd|-mkdir .cake3|]
       commands (rcmd $ prebuilds ms)
+      commands (S.toList $ prebuildsS ms)
       unsafeShell [cmd|MAIN=1 $(make) -f $(outputFile ms) $(makecmdgoals)|]
       commands (rcmd $ postbuilds ms)
+      commands (S.toList $ postbuildsS ms)
       markPhony
 
     line ""
