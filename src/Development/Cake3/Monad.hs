@@ -134,12 +134,15 @@ instance (MonadMake m) => MonadMake (StateT s m) where
   liftMake = lift . liftMake
 
 
--- | Returns a MakeState
+-- | Evaluate the Make monad @mf@, return MakeState containing the result. Name
+-- @mf@ is used for self-referencing recipes.
 evalMake :: (Monad m) => File -> Make' m a -> m MakeState
 evalMake mf mk = do
   ms <- flip execStateT (initialMakeState mf) (unMake mk)
   return ms {
-    errors = checkForEmptyTarget (recipes ms) ++ checkForTargetConflicts (recipes ms)
+    errors
+      =  checkForEmptyTarget (recipes ms)
+      ++ checkForTargetConflicts (recipes ms)
   }
 
 modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }

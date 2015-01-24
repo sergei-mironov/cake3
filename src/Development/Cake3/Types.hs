@@ -96,12 +96,12 @@ applyPlacement' pl m =
       all = L.map snd $ M.toList m
   in placed ++ (all \\ placed)
 
+filterRecipesByTools :: (Foldable t) => [Tool] -> t Recipe -> [Recipe]
+filterRecipesByTools ts rs = foldMap mp rs where
+  mp r = (\match -> if match then [r] else []) $ or $ map (\t -> S.member t (rtools r)) ts
+
 applyPlacement :: (Foldable t) => [File] -> t Recipe  -> [Recipe]
 applyPlacement pl rs = flattern $ applyPlacement' pl (groupRecipes rs)
-
--- applyPlacement2 :: (Foldable t) => [File] -> t File  -> [File]
--- applyPlacement2 pl fs = flattern $ applyPlacement' pl (groupSet S.singleton fs)
-    
 
 transformRecipes :: (Applicative m) => (Recipe -> m (Set Recipe)) -> Set Recipe -> m (Set Recipe)
 transformRecipes f m = S.foldl' f' (pure mempty) m where

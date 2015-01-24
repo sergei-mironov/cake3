@@ -197,7 +197,7 @@ defineClean mk rs =
     cleanRuleLL (fs `S.difference` (S.singleton mk))
     return ()
 
--- | Rule referring to the 
+-- | Default Makefile location
 defaultMakefile :: File
 defaultMakefile = fromFilePath ("." </> "Makefile")
 

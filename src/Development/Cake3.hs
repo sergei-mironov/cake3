@@ -105,12 +105,16 @@ file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
   addpoint "." = "."
   addpoint p = "."</>p
 
-runMake'
+-- | A Generic Make monad runner. Execute the monad @mk@, provide the @output@
+-- handler with Makefile encoded as a string. Note that Makefile may contain
+-- rules which references the file itself by the name @makefile@.  In case of
+-- errors, print report to stderr and abort the execution with @fail@ call
+runMakeH
   :: File -- ^ Output file
   -> Make a  -- ^ Make builder
   -> (String -> IO b) -- ^ Handler to output the file
-  -> IO b
-runMake' makefile mk output = do
+  -> IO (MakeState,b)
+runMakeH makefile mk output = do
   ms <- evalMake makefile mk
   when (not $ L.null (warnings ms)) $ do
     hPutStr stderr (warnings ms)
@@ -118,21 +122,31 @@ runMake' makefile mk output = do
     fail (errors ms)
   case buildMake ms of
     Left e -> fail e
-    Right s -> output s
+    Right s -> do
+      o <- output s
+      return (ms,o)
 
--- | Execute the Make monad, build the Makefile, write it to the output file. Also
--- note, that errors (if any) go to the stderr. fail will be executed in such
--- cases
+-- | A Version of @runMakeH@ returning no state
+runMakeH_
+  :: File -- ^ Output file
+  -> Make a  -- ^ Make builder
+  -> (String -> IO b) -- ^ Handler to output the file
+  -> IO b
+runMakeH_ f m h = snd `liftM` (runMakeH f m h)
+
+-- | Execute the @mk@ monad, return the Makefile as a String.  In case of
+-- errors, print report to stderr and abort the execution with @fail@ call
+runMake :: Make a -> IO String
+runMake mk = runMakeH_ defaultMakefile mk return
+
+-- | Execute the @mk@ monad, build the Makefile, write it to the output file.
+-- In case of errors, print report to stderr and abort the execution with @fail@
+-- call
 writeMake
   :: File -- ^ Output file
   -> Make a -- ^ Makefile builder
   -> IO ()
-writeMake f mk = runMake' f mk (writeFile (toFilePath f))
-
--- | A General Make runner. Executes the monad, returns the Makefile as a
--- String. Errors go to stdout. fail is possible.
-runMake :: Make a -> IO String
-runMake mk = runMake' defaultMakefile mk return
+writeMake f mk = runMakeH_ f mk (writeFile (toFilePath f))
 
 -- | Raise the recipe's priority (it will appear higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
