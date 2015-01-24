@@ -1,0 +1,14 @@
+allow url http://code.jquery.com/ui/1.10.3/jquery-ui.js
+allow mime text/javascript
+allow mime text/css
+debug
+include autogen/Bootstrap_css_c.h
+link autogen/Bootstrap_css_c.o
+ffi autogen/Bootstrap_css_c
+ffi autogen/Bootstrap_css_js
+allow mime text/css
+safeGet Bootstrap_css/blobpage
+safeGet Bootstrap_css/blob
+
+autogen/Bootstrap_css
+./Main

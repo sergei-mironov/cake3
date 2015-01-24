@@ -69,13 +69,14 @@ library
                      Development.Cake3.Monad
                      Development.Cake3.Ext.UrWeb
                      Development.Cake3.Utils.Find
+                     Development.Cake3.Utils.Slice
                      Text.QuasiMake
 
   build-depends:     base ==4.7.*, haskell-src-meta, template-haskell,
                      filepath, containers, text, monadloc, mtl,
                      bytestring, deepseq, system-filepath, text-format,
                      directory, attoparsec, mime-types,
-                     language-javascript, syb, parsec
+                     language-javascript, syb, parsec, process
 
   hs-source-dirs:    src
 

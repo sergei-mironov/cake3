@@ -35,11 +35,6 @@ class ToMakeText x where
 instance ToMakeText [Char] where
   toMakeText = id
 
-escapeFile f = escapeFile' (toFilePath f)
-escapeFile' [] = []
-escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
-escapeFile' (x:xs) = (x:(escapeFile' xs))
-
 instance ToMakeText File where
   toMakeText = escapeFile
 

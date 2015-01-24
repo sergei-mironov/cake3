@@ -27,6 +27,13 @@ toFilePath (FileT f) = f
 fromFilePath :: FilePath -> FileT FilePath
 fromFilePath f = FileT f
 
+-- | Convert File back to FilePath with escaped spaces
+escapeFile :: File -> FilePath
+escapeFile f = escapeFile' (toFilePath f) where
+  escapeFile' [] = []
+  escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
+  escapeFile' (x:xs) = (x:(escapeFile' xs))
+
 instance (Monoid a) => Monoid (FileT a) where
   mempty = FileT mempty
   mappend (FileT a) (FileT b) = FileT (a`mappend`b)

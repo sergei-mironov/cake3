@@ -96,9 +96,27 @@ applyPlacement' pl m =
       all = L.map snd $ M.toList m
   in placed ++ (all \\ placed)
 
-filterRecipesByTools :: (Foldable t) => [Tool] -> t Recipe -> [Recipe]
+filterRecipesByTools :: (Foldable t) => [Tool] -> t Recipe -> Set Recipe
 filterRecipesByTools ts rs = foldMap mp rs where
-  mp r = (\match -> if match then [r] else []) $ or $ map (\t -> S.member t (rtools r)) ts
+  mp r = (\match -> if match then S.singleton r else S.empty) $ or $ map (\t -> S.member t (rtools r)) ts
+
+filterRecipesByTargets :: (Foldable t, Foldable t2) => t2 File -> t Recipe -> Set Recipe
+filterRecipesByTargets ts rs = foldMap mp rs where
+  mp r = (\(Any match) -> if match then S.singleton r else S.empty) $ foldMap (\t -> Any $ S.member t (rtgt r)) ts
+
+filterRecipesByToolsDeep :: [Tool] -> Set Recipe -> Set Recipe
+filterRecipesByToolsDeep ts rs = fdeep (queryPrereq ry) rn ry where
+  ry = filterRecipesByTools ts rs
+  rn = rs `S.difference` ry
+
+  fdeep ts rn ry =
+    let
+      ry' = filterRecipesByTargets ts rn
+    in
+      if not $ S.null ry' then
+        fdeep (queryPrereq ry') (rn `S.difference` ry') (ry `S.union` ry')
+      else
+        ry
 
 applyPlacement :: (Foldable t) => [File] -> t Recipe  -> [Recipe]
 applyPlacement pl rs = flattern $ applyPlacement' pl (groupRecipes rs)
@@ -122,6 +140,9 @@ queryVariablesE rs = check where
 
 queryTargets :: (Foldable t) => t Recipe -> Set File
 queryTargets rs = foldl' (\a r -> a`mappend`(rtgt r)) mempty rs
+
+queryPrereq :: (Foldable t) => t Recipe -> Set File
+queryPrereq rs = foldl' (\a r -> a`mappend`(rsrc r)) mempty rs
 
 var :: String -> Maybe String -> Variable
 var n v = Variable n v

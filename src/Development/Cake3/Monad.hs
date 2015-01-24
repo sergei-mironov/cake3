@@ -100,14 +100,14 @@ postbuild cmdg = liftMake $ do
   pb <- fst <$> runA' (postbuilds s) (shell cmdg)
   put s { postbuilds = pb }
 
--- | Find recipes without targets
+-- | Find recipes without targets. Empty result means 'No errors'
 checkForEmptyTarget :: (Foldable f) => f Recipe -> String
 checkForEmptyTarget rs = foldl' checker mempty rs where
   checker es r | S.null (rtgt r) = es++e
                | otherwise = es where
-    e = printf "Error: Recipe without any targets:\n\t%s\n" (show r)
+    e = printf "Error: No target declared for recipe\n\t%s\n" (show r)
 
--- | Find recipes sharing a target
+-- | Find recipes sharing a target. Empty result means 'No errors'
 checkForTargetConflicts :: (Foldable f) => f Recipe -> String
 checkForTargetConflicts rs = foldl' checker mempty (groupRecipes rs) where
   checker es rs | S.size rs > 1 = es++e

@@ -18,6 +18,8 @@ module Development.Cake3 (
   , Make
   , buildMake
   , runMake
+  , runMakeH
+  , runMakeH_
   , writeMake
   , includeMakefile
   , MonadMake(..)
@@ -50,6 +52,7 @@ module Development.Cake3 (
   , cmd
   , makevar
   , extvar
+  , tool
   , CommandGen'(..)
   , make
   , ProjectLocation(..)
@@ -110,12 +113,10 @@ file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
 -- rules which references the file itself by the name @makefile@.  In case of
 -- errors, print report to stderr and abort the execution with @fail@ call
 runMakeH
-  :: File -- ^ Output file
-  -> Make a  -- ^ Make builder
+  :: MakeState -- ^ Result of evalMake
   -> (String -> IO b) -- ^ Handler to output the file
   -> IO (MakeState,b)
-runMakeH makefile mk output = do
-  ms <- evalMake makefile mk
+runMakeH ms output = do
   when (not $ L.null (warnings ms)) $ do
     hPutStr stderr (warnings ms)
   when (not $ L.null (errors ms)) $ do
@@ -128,16 +129,17 @@ runMakeH makefile mk output = do
 
 -- | A Version of @runMakeH@ returning no state
 runMakeH_
-  :: File -- ^ Output file
-  -> Make a  -- ^ Make builder
+  :: MakeState -- ^ Result of evalMake
   -> (String -> IO b) -- ^ Handler to output the file
   -> IO b
-runMakeH_ f m h = snd `liftM` (runMakeH f m h)
+runMakeH_ ms h = snd `liftM` (runMakeH ms h)
 
 -- | Execute the @mk@ monad, return the Makefile as a String.  In case of
 -- errors, print report to stderr and abort the execution with @fail@ call
 runMake :: Make a -> IO String
-runMake mk = runMakeH_ defaultMakefile mk return
+runMake mk = do
+  ms <- evalMake defaultMakefile mk
+  runMakeH_ ms return
 
 -- | Execute the @mk@ monad, build the Makefile, write it to the output file.
 -- In case of errors, print report to stderr and abort the execution with @fail@
@@ -146,7 +148,9 @@ writeMake
   :: File -- ^ Output file
   -> Make a -- ^ Makefile builder
   -> IO ()
-writeMake f mk = runMakeH_ f mk (writeFile (toFilePath f))
+writeMake f mk = do
+  ms <- evalMake defaultMakefile mk
+  runMakeH_ ms (writeFile (toFilePath f))
 
 -- | Raise the recipe's priority (it will appear higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
