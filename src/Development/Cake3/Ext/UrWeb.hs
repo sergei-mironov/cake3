@@ -649,13 +649,26 @@ parse_js contents = do
     findTopLevelFunctions top = map decls $ listify is_func top where
       is_func n@(JSFunction a b c d e f) = True
       is_func _ = False
-      decls (JSFunction a b c d e f) = (identifiers b) ++ (identifiers d)
+      decls (JSFunction a b c d e f) = (identifiers b) ++ (identifiersC d)
 
     findTopLevelVars :: JSNode -> [String]
     findTopLevelVars top = map decls $ listify is_var top where
       is_var n@(JSVarDecl a []) = True
       is_var _ = False
       decls (JSVarDecl a _) = (head $ identifiers a);
+
+    identifiersC x = map name $ listify ids x where
+      ids i@(NT (JSIdentifier s) _ com) = True
+      ids _ = False
+      name (NT (JSIdentifier n) _ com)
+        | not $ null $ comglue = n ++ "_as_" ++ comglue
+        | otherwise = n
+        where
+          comglue = concat $ map
+            (\c ->
+              case c of
+                CommentA _ c -> unwords $ filter (\c -> c /= "/*" && c /= "*/") $ words c
+                _ -> "") com
       
     identifiers x = map name $ listify ids x where
       ids i@(JSIdentifier s) = True
