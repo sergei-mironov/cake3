@@ -9,16 +9,18 @@ unexport MAIN
 # Main section
 
 .PHONY: all
-all: ./Makefile ./main.elf
-./main.elf: ./Makefile ./main\ space.o
+all: ./Makefile.devel ./main.elf
+./main.elf: ./Makefile.devel ./main\ space.o
 	gcc -o ./main.elf ./main\ space.o
-./main\ space.o: ./Makefile ./main\ space.c ./main.h $(call GUARD,CFLAGS)
+./main\ space.o: ./Makefile.devel ./main\ space.c ./main.h $(call GUARD,CFLAGS)
 	gcc -c $(CFLAGS) -o ./main\ space.o ./main\ space.c
-./depend.mk: ./Makefile ./main\ space.c ./main.h
+./depend.mk: ./Makefile.devel ./main\ space.c ./main.h
 	gcc -M ./main\ space.c -MF ./depend.mk
+./main.h: ./Makefile.devel ./main.h.in
+	sed 's/HELLO/\"HELLO CAKE3!\"/' ./main.h.in > ./main.h
 ./Cakegen: ./Cakefile.hs
 	cake3
-./Makefile: ./Cakegen
+./Makefile.devel: ./Cakegen
 	./Cakegen
 $(call GUARD,CFLAGS):
 	rm -f .cake3/GUARD_CFLAGS_*
@@ -39,22 +41,24 @@ all: .fix-multy1
 ./main\ space.o: .fix-multy1
 .PHONY: ./depend.mk
 ./depend.mk: .fix-multy1
+.PHONY: ./main.h
+./main.h: .fix-multy1
 .PHONY: ./Cakegen
 ./Cakegen: .fix-multy1
-.PHONY: ./Makefile
-./Makefile: .fix-multy1
+.PHONY: ./Makefile.devel
+./Makefile.devel: .fix-multy1
 .INTERMEDIATE: .fix-multy1
 .fix-multy1: 
 	-mkdir .cake3
 	@echo "*****************"
 	@echo "THE CAKE3 EXAMPLE"
 	@echo "*****************"
-	MAIN=1 $(MAKE) -f ./Makefile $(MAKECMDGOALS)
+	MAIN=1 $(MAKE) -f ./Makefile.devel $(MAKECMDGOALS)
 
 endif
 .PHONY: clean
 clean: 
-	-rm ./Cakegen ./depend.mk ./main\ space.o ./main.elf
+	-rm ./Cakegen ./depend.mk ./main\ space.o ./main.elf ./main.h
 	-rm -rf .cake3
 
 endif

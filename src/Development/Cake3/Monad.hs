@@ -68,12 +68,14 @@ data MakeState = MS {
     -- ^ Warnings found so far
   , outputFile :: File
     -- ^ Name of the Makefile being generated
-  , tmpIndex :: Int
+  -- , tmpIndex :: Int
     -- ^ Index to build temp names
+  , extraClean :: Set File
+  -- ^ extra clean files
   }
 
 -- Oh, such a boilerplate
-initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf 0 where
+initialMakeState mf = MS defr defr mempty mempty mempty mempty mempty mempty mempty mf mempty where
   defr = emptyRecipe "<internal>"
 
 getPlacementPos :: Make Int

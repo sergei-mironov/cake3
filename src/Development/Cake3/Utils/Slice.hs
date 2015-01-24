@@ -31,19 +31,22 @@ writeSliced fo sls mk = do
 
   ecs <- forM sls $ \(fs,ts) -> do
 
-    rs <- return $ filterRecipesByToolsDeep ts (recipes ms)
-    ts <- return $ S.toList $ queryTargets rs
+    ms <- evalMake fs mk
+    let rs = filterRecipesByToolsDeep ts (recipes ms)
+    let ts = S.toList $ queryTargets rs
+
+    putStrLn  $ printf "Writing %s" (escapeFile fs)
+    runMakeH ms {
+        recipes = (recipes ms) `S.difference` rs
+      } (writeFile (toFilePath fs))
 
     putStrLn  $ printf "Executing: make -f %s %s" (escapeFile fo) (unwords $ map escapeFile ts)
     ec <- system $ printf "make -f %s %s" (escapeFile fo) (unwords $ map escapeFile ts)
-
-    putStrLn  $ printf "Writing %s" (escapeFile fs)
-    runMakeH ms{ recipes = (recipes ms) `S.difference` rs } (writeFile (toFilePath fs))
 
     return (ec,fs)
 
   forM_ ecs $ \(ec,sln) ->
     case ec of
-      ExitFailure i -> fail $ printf "Non-zero exit code (%d) while building %s\n" (show ec) (escapeFile sln)
+      ExitFailure i -> fail $ printf "Non-zero exit code (%d) while building %s\n" i (escapeFile sln)
       _ -> return ()
 

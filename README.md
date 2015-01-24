@@ -237,6 +237,14 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
     A/Cakefile.hs and do whatever you want to. Resulting makefiles will always
     be monolitic.
 
+  * *Cake3 may generate different versions of Makefile at once*
+
+    We often want to generate developer's and end-user's makefiles. End-user
+    version may want treat several rules as pre-executed. Cake3 easily allows us
+    to do that by using 'slicing' utility. See ./Examples/GCC_SED/Cakefile.hs
+    for details.
+
+
 ### Limitations
 
 #### Make syntax

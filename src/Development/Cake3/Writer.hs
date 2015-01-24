@@ -169,13 +169,6 @@ hasClean rs = F.foldl' flt False rs where
   flt True _ = True
   flt False r = (Phony `S.member`(rflags r)) && ((fromFilePath "clean")`S.member`(rtgt r))
 
-intermediateFiles :: (Foldable t) => t Recipe -> Set File
-intermediateFiles rs = 
-  execWriter $ do
-    forM_ rs $ \r -> do
-      when (not $ Phony `S.member` (rflags r)) $ do
-        tell (rtgt r)
-
 cleanRuleLL :: Set File -> MakeLL Recipe
 cleanRuleLL fs =
   ruleLL $ do
@@ -185,10 +178,9 @@ cleanRuleLL fs =
 
 -- | Define a 'clean' phony target. The rule removes all targets except phony
 -- targets and the Makefile itself
-defineClean :: File -> Set Recipe -> Set Recipe
-defineClean mk rs =
+defineClean :: File -> Set File -> Set Recipe
+defineClean mk fs =
   runMakeLL "defineClean" $ do
-    let fs = intermediateFiles rs
     cleanRuleLL (fs `S.difference` (S.singleton mk))
     return ()
 
@@ -255,7 +247,7 @@ buildMake ms = do
                    $ fixMultiTarget [r]
         line ""
         line "endif"
-        writeRules $ defineClean (outputFile ms) (recipes ms)
+        writeRules $ defineClean (outputFile ms) ((intermediateFiles (recipes ms))`mappend` (extraClean ms))
     line ""
 
   hdr <- runLines $ do

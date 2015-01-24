@@ -4,15 +4,14 @@ import Development.Cake3
 import Development.Cake3.Utils.Slice
 import Cakefile_P
 
-
-
+-- | Let's imagine that sed is our build-only tool.
 sed = tool "sed"
 
 
 -- | Build the Makefile and Makefile.nosed. The latter assumes that all targets
 -- depending on 'sed' rule are pre-built. In this case this should be a 'main.h'
 -- target. 
-main = writeSliced (file "Makefile") [(file "Makefile.nosed", [sed])] $ do
+main = writeSliced (file "Makefile.devel") [(file "Makefile", [cake3,cakegen,sed])] $ do
 
   prebuild [cmd|@@echo "*****************"|]
   prebuild [cmd|@@echo "THE CAKE3 EXAMPLE"|]

@@ -13,7 +13,8 @@ cat <<EOF
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
-module ${1}_P(file, cakefiles, selfUpdate,filterDirectoryContentsRecursive) where
+module ${1}_P(file, cakefiles, selfUpdate,filterDirectoryContentsRecursive,
+cakegen, cake3) where
 
 import Control.Monad.Trans
 import Control.Monad.State
@@ -43,16 +44,20 @@ cakefiles =
     "$TOP" -> map (file' rl) ($3)
     _ -> error "cakefiles are defined for top-level cake only"
 
+cakegen = tool "./Cakegen"
+cake3 = tool "cake3"
+
 selfUpdate :: Make [File]
 selfUpdate = do
   makefile <- outputFile <$> get
   (_,cg) <- rule2 $ do
     depend cakefiles
     produce (file "Cakegen")
-    shell [cmd|cake3|]
+    shell [cmd|\$(cake3)|]
   (_,f) <- rule2 $ do
+    depend cg
     produce makefile
-    shell [cmd|\$cg|]
+    shell [cmd|\$(cakegen)|]
   return f
 
 filterDirectoryContentsRecursive :: (MonadIO m) => [String] -> m [File]

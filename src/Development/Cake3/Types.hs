@@ -2,11 +2,13 @@
 module Development.Cake3.Types where
 
 import Control.Applicative
+import Control.Monad (when)
+import Control.Monad.Writer (MonadWriter, WriterT(..), execWriterT, execWriter, tell)
 import Data.Maybe
 import Data.Monoid
 import Data.Data
 import Data.Typeable
-import Data.Foldable (Foldable(..), foldl')
+import Data.Foldable (Foldable(..), foldl', forM_)
 import qualified Data.List as L
 import Data.List hiding(foldr, foldl')
 import qualified Data.Map as M
@@ -146,6 +148,13 @@ queryPrereq rs = foldl' (\a r -> a`mappend`(rsrc r)) mempty rs
 
 var :: String -> Maybe String -> Variable
 var n v = Variable n v
+
+intermediateFiles :: (Foldable t) => t Recipe -> Set File
+intermediateFiles rs = 
+  execWriter $ do
+    forM_ rs $ \r -> do
+      when (not $ Phony `S.member` (rflags r)) $ do
+        tell (rtgt r)
 
 tool :: String -> Tool
 tool = Tool
