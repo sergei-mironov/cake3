@@ -70,6 +70,7 @@ import Control.Monad.Trans
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Loc
+import Data.Char
 import qualified Data.List as L
 import Data.List (concat,map, (++), reverse,elem,intercalate,delete)
 import Data.Foldable (Foldable(..), foldr)
@@ -193,16 +194,19 @@ rule' :: (MonadMake m) => A a -> m a
 rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
 
-genFile :: (MonadMake m) => File -> String -> m File
+genFile :: File -> String -> Make File
 genFile tgt cnt = rule' $do
-  shell [cmd|-rm -rf @tgt |]
+  shell [cmd|( \|]
   forM_ (lines cnt) $ \l -> do
-    shell [cmd|echo '$(string (quote_dollar l))' >> @tgt |]
+    shell [cmd|echo $(string (quote l))  ;\|]
+  shell [cmd|) > @tgt|]
   return tgt
   where
-    quote_dollar [] = []
-    quote_dollar ('$':cs) = '$':'$':(quote_dollar cs)
-    quote_dollar (c:cs) = c : (quote_dollar cs)
+    quote [] = []
+    quote ('$':cs) = '$':'$':(quote cs)
+    quote (x:cs)
+      | not (isAlphaNum x) = '\\':x:(quote cs)
+      | otherwise = x : (quote cs)
 
 -- FIXME: buggy function, breaks commutativity
 -- genTmpFile :: (MonadMake m) => String -> m File
