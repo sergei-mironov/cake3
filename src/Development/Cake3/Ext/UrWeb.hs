@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE IncoherentInstances #-}
 module Development.Cake3.Ext.UrWeb where
 
 import Data.Data
@@ -187,6 +188,14 @@ instance ToUrpLine UrpModToken where
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
+
+class (Monad m, Monad m1) => MonadUrpGen m1 m where
+  liftUrpGen :: m1 a -> m a
+
+instance (Monad m) => MonadUrpGen m (UrpGen m) where
+  liftUrpGen m = UrpGen (lift m)
+
+
 runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,UrpState)
 runUrpGen f m = runStateT (unUrpGen m) (defState f)
 
@@ -258,19 +267,19 @@ uwapp uwflags urpfile m = do
     unsafeShell [cmd|urweb $(string uwflags) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
   return $ UWExe u
 
-addHdr :: (MonadMake m) => UrpHdrToken -> UrpGen m ()
+addHdr :: (Monad m) => UrpHdrToken -> UrpGen m ()
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
 
-addSrc :: (MonadMake m) => SrcFile -> UrpGen m ()
+addSrc :: (Monad m) => SrcFile -> UrpGen m ()
 addSrc f = modify $ \s -> let u = urpst s in s { urpst = u { srcs = f : (srcs u) } }
 
-database :: (MonadMake m) => String -> UrpGen m ()
+database :: (Monad m) => String -> UrpGen m ()
 database dbs = addHdr $ UrpDatabase dbs
 
-allow :: (MonadMake m) => UrpAllow -> String -> UrpGen m ()
+allow :: (Monad m) => UrpAllow -> String -> UrpGen m ()
 allow a s = addHdr $ UrpAllow a s
 
-rewrite :: (MonadMake m) => UrpRewrite -> String -> UrpGen m ()
+rewrite :: (Monad m) => UrpRewrite -> String -> UrpGen m ()
 rewrite a s = addHdr $ UrpRewrite a s
 
 -- addDot f = addDot' $ F.normalise f where
@@ -293,23 +302,26 @@ rewrite a s = addHdr $ UrpRewrite a s
 -- urpUp f = wayback $ mkrel f where
 --   mkrel (FileT hint path) = F.makeRelative hint path
 
-class LibraryDecl x where
-  library :: (MonadMake m) => x -> UrpGen m ()
+class LibraryDecl m x where
+  library :: x -> UrpGen m ()
   
-instance LibraryDecl File where
+instance (Monad m) => LibraryDecl m File where
   library l = do
       when ((takeExtension l) /= ".urp") $ do
         fail $ printf "library declaration '%s' should ends with '.urp'" (topRel l)
       addHdr $ UrpLibrary l
 
-instance LibraryDecl [File] where
+instance (Monad m) => LibraryDecl m [File] where
   library  ls = forM_ ls library
 
-instance LibraryDecl UWLib where
-  library (UWLib u) = library [urp u]
+instance (Monad m) => LibraryDecl m UWLib where
+  library (UWLib u) = library (urp u)
 
-instance LibraryDecl x => LibraryDecl (Make x) where
-  library  ml = liftMake ml >>= library
+instance (Monad m) => LibraryDecl m (m File) where
+  library ml = (liftUrpGen ml) >>= library
+
+instance (Monad m, LibraryDecl m x) => LibraryDecl m (m x) where
+  library ml = (liftUrpGen ml) >>= library
 
 -- | Build a file using external Makefile facility.
 externalMake3 ::
@@ -370,10 +382,10 @@ sys = UrpModuleSys
 
 pair f = UrpModule2 (f.="ur") (f.="urs")
 
-debug :: (MonadMake m) => UrpGen m ()
+debug :: (Monad m) => UrpGen m ()
 debug = addHdr UrpDebug
 
-include :: (MonadMake m) => File -> UrpGen m ()
+include :: (Monad m) => File -> UrpGen m ()
 include = addHdr . UrpInclude
 
 
