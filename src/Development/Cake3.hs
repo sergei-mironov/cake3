@@ -103,9 +103,8 @@ currentDirLocation = do
 -- | Converts string representation of Path into type-safe File. Internally,
 -- files are stored as a relative offsets from the project root directory
 file' :: ProjectLocation -> String -> File
-file' pl f' = fromFilePath (addDot (F.normalise rel)) where
-  rel = makeRelative (root pl) ((off pl) </> f)
-  f = F.dropTrailingPathSeparator f'
+file' pl f = fromFilePath (addDot (F.normalise rel)) where
+  rel = makeRelative (root pl) ((off pl) </> (F.dropTrailingPathSeparator f))
   addDot "." = "."
   addDot p = "."</>p
 

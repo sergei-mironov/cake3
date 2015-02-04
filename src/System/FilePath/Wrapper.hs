@@ -17,9 +17,6 @@ import Text.Printf
 newtype FileT a = FileT a
   deriving(Show,Eq,Ord,Data,Typeable)
 
--- | Simple wrapper for FilePath.
-type File = FileT FilePath
-
 -- | Convert File back to FilePath
 toFilePath :: (FileT FilePath) -> FilePath
 toFilePath (FileT f) = f
@@ -28,7 +25,7 @@ fromFilePath :: FilePath -> FileT FilePath
 fromFilePath f = FileT f
 
 -- | Convert File back to FilePath with escaped spaces
-escapeFile :: File -> FilePath
+escapeFile :: FileT FilePath -> FilePath
 escapeFile f = escapeFile' (toFilePath f) where
   escapeFile' [] = []
   escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs

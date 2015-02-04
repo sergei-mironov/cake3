@@ -176,3 +176,6 @@ extvar n = var n Nothing
 -- | Reref to special variable @$(MAKE)@
 make = extvar "MAKE"
 
+-- | Simple wrapper for FilePath.
+type File = FileT FilePath
+

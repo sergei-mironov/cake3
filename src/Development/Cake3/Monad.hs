@@ -466,5 +466,6 @@ cmd = QuasiQuoter
                                   Right e -> case c of
                                     '$' -> appE [| refInput |] (return e)
                                     '@' -> appE [| refOutput |] (return e)
+                                    _ -> error $ "cmd: unknown quotation modifier " ++ [c]
       in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
 
