@@ -11,7 +11,7 @@ main = writeMake (file "Makefile") $ do
   u <- uwlib (file "Script.urp") $ do
     ffi (file "Script.urs")
     include (file "Script.h")
-    link (file "Script.o")
+    src (file "Script.c")
     pkgconfig "jansson"
 
   t1 <- uwapp "-dbms sqlite" (file "Test1.urp") $ do

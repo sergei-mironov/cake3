@@ -88,6 +88,7 @@ instance UrpLike UWExe where
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
   scan1 a (UrpLink f _) = f:a
+  scan1 a (UrpSrc f _ _) = (f.="o"):a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
   scan1 a _ = a
