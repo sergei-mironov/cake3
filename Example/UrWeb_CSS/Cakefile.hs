@@ -2,9 +2,10 @@ module Cakefile where
 
 import Development.Cake3
 import Development.Cake3.Ext.UrWeb
+import Development.Cake3.Utils.Slice
 import Cakefile_P
 
-main = writeMake (file "Makefile") $ do
+main = writeSliced (file "Makefile.devel") [(file "Makefile", [cake3,cakegen,urembed])] $ do
 
   prebuild [cmd|urweb -print-cinclude >/dev/null|]
 
@@ -17,6 +18,8 @@ main = writeMake (file "Makefile") $ do
       debug
       embed (file "bootstrap.css")
       ur (file "Main.ur")
+
+  selfUpdate
 
   return ()
 

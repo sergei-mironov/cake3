@@ -39,7 +39,6 @@ data UrpHdrToken = UrpDatabase String
                  | UrpDebug
                  | UrpInclude File
                  | UrpLink File String -- ^ File.o to link, additional linker flags
-                 | UrpSrc File String String
                  | UrpPkgConfig String
                  | UrpFFI File
                  | UrpJSFunc String String String -- ^ Module name, UrWeb name, JavaScript name
@@ -54,11 +53,15 @@ data UrpModToken
   | UrpModuleSys String
   deriving(Show,Data,Typeable)
 
+data SrcFile = SrcFile File String String
+  deriving(Show,Data,Typeable)
+
 data Urp = Urp {
     urp :: File
   , uexe :: Maybe File
   , uhdr :: [UrpHdrToken]
   , umod :: [UrpModToken]
+  , srcs :: [SrcFile]
   } deriving(Show,Data,Typeable)
 
 newtype UWLib = UWLib Urp
@@ -75,8 +78,6 @@ instance (MonadAction a m) => RefInput a m UWExe where
  
 class UrpLike x where
   toUrp :: x -> Urp
-  -- tempfiles :: x -> [File]
-  -- tempfiles = (\x -> (urpObjs x) ++ maybeToList (urpSql' x) ++ maybeToList (urpExe' x)) . toUrp
 
 instance UrpLike Urp where
   toUrp = id
@@ -87,18 +88,18 @@ instance UrpLike UWExe where
   toUrp (UWExe x) = x
 
 urpDeps :: Urp -> [File]
-urpDeps (Urp _ _ hdr mod) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
+urpDeps (Urp _ _ hdr mod srcs) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
   scan1 a (UrpLink f _) = f:a
-  scan1 a (UrpSrc f _ _) = (f.="o"):a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
   scan1 a _ = a
   scan2 a (UrpModule1 f) = f:a
   scan2 a (UrpModule2 f1 f2) = f1:f2:a
   scan2 a _ = a
+  scan3 a (SrcFile f _ _) = (f.="o"):a
 
 urpSql' :: Urp -> Maybe File
-urpSql' (Urp _ _ hdr _) = find hdr where
+urpSql' (Urp _ _ hdr _ _) = find hdr where
   find [] = Nothing
   find ((UrpSql f):hs) = Just f
   find (h:hs) = find hs
@@ -108,16 +109,7 @@ urpSql u = case urpSql' u of
   Nothing -> error "ur project defines no SQL file"
   Just sql -> sql
 
-urpSrcs (Urp _ _ hdr _) = foldl' scan [] hdr where
-  scan a (UrpSrc f cfl lfl) = (f,cfl,lfl):a
-  scan a _ = a
-
--- urpObjs (Urp _ _ hdr _) = foldl' scan [] hdr where
---   scan a (UrpSrc f _ _) = (f.="o"):a
---   scan a (UrpLink f _) = f:a
---   scan a _ = a
-
-urpLibs (Urp _ _ hdr _) = foldl' scan [] hdr where
+urpLibs (Urp _ _ hdr _ _) = foldl' scan [] hdr where
   scan a (UrpLibrary f) = f:a
   scan a _ = a
 
@@ -126,7 +118,7 @@ urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
 
-urpPkgCfg (Urp _ _ hdr _) = foldl' scan [] hdr where
+urpPkgCfg (Urp _ _ hdr _ _) = foldl' scan [] hdr where
   scan a (UrpPkgConfig s) = s:a
   scan a _ = a
 
@@ -135,7 +127,7 @@ data UrpState = UrpState {
   , urautogen :: File
   } deriving (Show)
 
-defState urp = UrpState (Urp urp Nothing [] []) (fromFilePath "autogen")
+defState urp = UrpState (Urp urp Nothing [] [] []) (fromFilePath "autogen")
 
 autogenDir :: (Monad m) => UrpGen m File
 autogenDir = urautogen `liftM` get
@@ -172,7 +164,6 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
   toUrpLine up (UrpLink f []) = printf "link %s" (up </> toFilePath f)
   toUrpLine up (UrpLink f lfl) = printf "link %s\nlink %s" (up </> toFilePath f) lfl
-  toUrpLine up (UrpSrc f _ _) = printf "link %s" (up </> toFilePath (f.="o"))
   toUrpLine up (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
   toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
   toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
@@ -215,10 +206,10 @@ urcflags = extvar "UR_CFLAGS"
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
   ((),s) <- runUrpGen urpfile m
-  let u@(Urp _ _ hdr mod) = urpst s
+  let u@(Urp _ _ hdr mod srcs) = urpst s
   let pkgcfg = (urpPkgCfg u)
 
-  os <- forM (urpSrcs u) $ \(src,cfl,lfl) -> do
+  os <- forM srcs $ \(SrcFile src cfl lfl) -> do
     let cflags = string $ concat $ cfl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
     o <- (case takeExtension src of
       ".cpp" -> do
@@ -261,6 +252,9 @@ uwapp uwflags urpfile m = do
 
 addHdr :: (MonadMake m) => UrpHdrToken -> UrpGen m ()
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
+
+addSrc :: (MonadMake m) => SrcFile -> UrpGen m ()
+addSrc f = modify $ \s -> let u = urpst s in s { urpst = u { srcs = f : (srcs u) } }
 
 database :: (MonadMake m) => String -> UrpGen m ()
 database dbs = addHdr $ UrpDatabase dbs
@@ -367,7 +361,7 @@ class SrcDecl x where
   src :: (MonadMake m) => x -> UrpGen m ()
 
 instance SrcDecl (File,String,String) where
-  src (f,cfl,lfl) = addHdr $ UrpSrc f cfl lfl
+  src (f,cfl,lfl) = addSrc $ SrcFile f cfl lfl
 
 instance SrcDecl File where
   src f = src (f,"","")
