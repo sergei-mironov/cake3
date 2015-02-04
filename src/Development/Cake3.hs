@@ -91,8 +91,8 @@ import Development.Cake3.Monad
 import System.FilePath.Wrapper as W
 
 data ProjectLocation = ProjectLocation {
-    root :: FilePath
-  , off :: FilePath
+    root :: FilePath -- ^ Path (absolute) to main project's top dir
+  , off :: FilePath -- ^ Offset to the current project module
   } deriving (Show, Eq, Ord)
 
 currentDirLocation :: (MonadIO m) => m ProjectLocation
@@ -103,11 +103,11 @@ currentDirLocation = do
 -- | Converts string representation of Path into type-safe File. Internally,
 -- files are stored as a relative offsets from the project root directory
 file' :: ProjectLocation -> String -> File
-file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
+file' pl f' = fromFilePath (addDot (F.normalise rel)) where
   rel = makeRelative (root pl) ((off pl) </> f)
   f = F.dropTrailingPathSeparator f'
-  addpoint "." = "."
-  addpoint p = "."</>p
+  addDot "." = "."
+  addDot p = "."</>p
 
 -- | A Generic Make monad runner. Execute the monad @mk@, provide the @output@
 -- handler with Makefile encoded as a string. Note that Makefile may contain
@@ -184,9 +184,9 @@ rule' act = liftMake $ do
 
 -- | Create the rule, place it's recipe above all recipies defined so far. See
 -- rule' for other details
-rule :: (MonadMake m)
-  => A a    -- ^ Recipe builder
-  -> m a
+rule
+  :: A a    -- ^ Recipe builder
+  -> Make a
 rule act = snd `liftM` withPlacement (rule' act)
 
 -- | A version of rule, without monad set explicitly
@@ -232,8 +232,8 @@ genFile f c = genFile' f c (return ())
 t1 :: Make ()
 t1 = do
   rule $ do
-    a <- rule $ shell1 [cmd|echo a > @(file "a")|]
-    shell [cmd|cp $a @(file "b")|]
+    a <- rule' $ shell1 [cmd|echo a > @(file "a")|]
+    shell [cmd|cp $(snd a) @(file "b")|]
   return ()
   where
     file = file' (ProjectLocation "." ".") 
