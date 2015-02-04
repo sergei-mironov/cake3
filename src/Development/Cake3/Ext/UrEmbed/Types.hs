@@ -10,11 +10,14 @@ data Args = A
   , out_h :: FilePath
   , out_urs :: FilePath
   , out_wrapper :: FilePath
-  , out_ffi_js :: FilePath
+  , out_ffi_js_lib :: FilePath
   , mangle_css_url :: Bool
   , inp :: FilePath
   }
 
+out_ffi_js a = wrap (out_ffi_js_lib a) where
+  wrap [] = []
+  wrap p = (dropExtension p) ++ "_js.urs"
 
 guessModName :: FilePath -> String
 guessModName = uwModName . (++ ".urs")

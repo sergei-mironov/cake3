@@ -118,10 +118,20 @@ mk_wrap a us open_js_ffi = toFile (out_wrapper a) $ do
   when (open_js_ffi) $ do
     line $ "open " ++ (uwModName (out_ffi_js a))
   line $ "val url = url(content {})"
+  line $ "val geturl = url"
 
 mk_js_wrap :: Args -> ([JSType],[JSFunc]) -> IO ()
 mk_js_wrap a (jt,jf) = do
   toFile (out_ffi_js a) $ do
     forM_ jt $ \decl -> line (urtdecl decl)
     forM_ jf $ \decl -> line (urdecl decl)
+
+mk_js_lib :: Args -> ([JSType],[JSFunc]) -> IO ()
+mk_js_lib a (jt,jf) = do
+  toFile (out_ffi_js_lib a) $ do
+    let m = uwModName (out_ffi_js a)
+    line $ "ffi " ++ m
+    forM_ jf $ \decl -> do
+      line $ (printf "jsFunc %s.%s = %s" m (urname decl) (jsname decl) :: String)
+      line $ (printf "clientOnly %s.%s" m (urname decl) :: String)
 

@@ -295,13 +295,15 @@ rewrite a s = addHdr $ UrpRewrite a s
 
 class LibraryDecl x where
   library :: (MonadMake m) => x -> UrpGen m ()
-
-instance LibraryDecl [File] where
-  library  ls = do
-    forM_ ls $ \l -> do
+  
+instance LibraryDecl File where
+  library l = do
       when ((takeExtension l) /= ".urp") $ do
         fail $ printf "library declaration '%s' should ends with '.urp'" (topRel l)
       addHdr $ UrpLibrary l
+
+instance LibraryDecl [File] where
+  library  ls = forM_ ls library
 
 instance LibraryDecl UWLib where
   library (UWLib u) = library [urp u]
@@ -449,9 +451,9 @@ embed' ueo' js_ffi f = do
   let s = intermed f "_c" "urs"
   let w = intermed f "" "ur"
   j <- (if js_ffi then do
-         let js = intermed f "_js" "urs"
-         ffi js
-         return ("-j " ++ (topRel js))
+         let jurp = intermed f "_js" "urp"
+         library jurp
+         return ("-j " ++ (topRel jurp))
        else
          return "")
   rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $(string j) $f|]

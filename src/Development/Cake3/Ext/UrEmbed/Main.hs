@@ -58,7 +58,7 @@ main_ a
              else
                return (c,[])
 
-    j <- if (not $ null (out_ffi_js a)) then do
+    j <- if (not $ null (out_ffi_js_lib a)) then do
       pr <- parse_js c
       case pr of
         Left e -> do
@@ -66,6 +66,7 @@ main_ a
           return False
         Right js -> do
           mk_js_wrap a js
+          mk_js_lib a js
           return True
       else
         return False
