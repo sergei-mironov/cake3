@@ -27,7 +27,7 @@ writeSliced :: File -> [(File,[Tool])] -> Make a -> IO ()
 writeSliced fo sls mk = do
   cwd <- currentDirLocation
   ms <- evalMake fo mk
-  runMakeH ms (writeFile (toFilePath fo))
+  runMakeH ms (writeFile (topRel fo))
 
   ecs <- forM sls $ \(fs,ts) -> do
 
@@ -38,7 +38,7 @@ writeSliced fo sls mk = do
     putStrLn  $ printf "Writing %s" (escapeFile fs)
     runMakeH ms {
         recipes = (recipes ms) `S.difference` rs
-      } (writeFile (toFilePath fs))
+      } (writeFile (topRel fs))
 
     putStrLn  $ printf "Executing: make -f %s %s" (escapeFile fo) (unwords $ map escapeFile ts)
     ec <- system $ printf "make -f %s %s" (escapeFile fo) (unwords $ map escapeFile ts)

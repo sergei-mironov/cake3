@@ -40,7 +40,7 @@ module Development.Cake3 (
   , file'
   , (.=)
   , (</>)
-  , toFilePath
+  , topRel
   , readFileForMake
   , genFile'
   , genFile
@@ -55,7 +55,7 @@ module Development.Cake3 (
   , tool
   , CommandGen'(..)
   , make
-  , ProjectLocation(..)
+  , ModuleLocation(..)
   , currentDirLocation
 
   -- Import several essential modules
@@ -90,24 +90,8 @@ import Development.Cake3.Writer
 import Development.Cake3.Monad
 import System.FilePath.Wrapper as W
 
-data ProjectLocation = ProjectLocation {
-    root :: FilePath -- ^ Path (absolute) to main project's top dir (for which the Makefile is to be generated)
-  , off :: FilePath -- ^ Path (absolute) to the current module
-  } deriving (Show, Eq, Ord)
-
-currentDirLocation :: (MonadIO m) => m ProjectLocation
-currentDirLocation = do
-  cwd <- liftIO $ getCurrentDirectory
-  return $ ProjectLocation cwd cwd
-
--- | Converts string representation of Path into type-safe File. Internally,
--- files are stored as a relative offsets from the project root directory
-file' :: ProjectLocation -> String -> File
-file' pl f = fromFilePath hint (addDot (F.normalise rel)) where
-  rel = makeRelative (root pl) ((off pl) </> (F.dropTrailingPathSeparator f))
-  hint = makeRelative (root pl) (off pl)
-  addDot "." = "."
-  addDot p = "."</>p
+currentDirLocation :: (MonadIO m) => m ModuleLocation
+currentDirLocation = return toplevelModule
 
 -- | A Generic Make monad runner. Execute the monad @mk@, provide the @output@
 -- handler with Makefile encoded as a string. Note that Makefile may contain
@@ -151,7 +135,7 @@ writeMake
   -> IO ()
 writeMake f mk = do
   ms <- evalMake defaultMakefile mk
-  runMakeH_ ms (writeFile (toFilePath f))
+  runMakeH_ ms (writeFile (topRel f))
 
 -- | Raise the recipe's priority (it will appear higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
@@ -229,14 +213,14 @@ genFile f c = genFile' f c (return ())
 -- TESTS
 --
 
-t1 :: Make ()
-t1 = do
-  rule $ do
-    a <- rule' $ shell1 [cmd|echo a > @(file "a")|]
-    shell [cmd|cp $(snd a) @(file "b")|]
-  return ()
-  where
-    file = file' (ProjectLocation "." ".") 
+-- t1 :: Make ()
+-- t1 = do
+--   rule $ do
+--     a <- rule' $ shell1 [cmd|echo a > @(file "a")|]
+--     shell [cmd|cp $(snd a) @(file "b")|]
+--   return ()
+--   where
+--     file = file' (ProjectLocation "." ".") 
 
 
 

@@ -94,7 +94,7 @@ addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
 tmp_file :: String -> File
-tmp_file pfx = (fromFilePath "." (".cake3" </> ("tmp_"++ pfx )))
+tmp_file pfx = (fromFilePath toplevelModule (".cake3" </> ("tmp_"++ pfx )))
 
 prebuild, postbuild, prebuildS, postbuildS :: (MonadMake m) => CommandGen -> m ()
 
@@ -127,10 +127,10 @@ checkForEmptyTarget rs = foldl' checker mempty rs where
 
 -- | Find recipes sharing a target. Empty result means 'No errors'
 checkForTargetConflicts :: (Foldable f) => f Recipe -> String
-checkForTargetConflicts rs = foldl' checker mempty (groupRecipes rs) where
-  checker es rs | S.size rs > 1 = es++e
-                | otherwise = es where
-    e = printf "Error: Recipes share one or more targets:\n\t%s\n" (show rs)
+checkForTargetConflicts rs = M.foldlWithKey' checker mempty (groupRecipes rs) where
+  checker es k v | S.size v > 1 = es++e
+                 | otherwise = es where
+    e = printf "Error: Target %s is shared by the following recipes:\n\t%s\n" (show k) (show v)
 
 
 -- | A Monad providing access to MakeState. TODO: not mention IO here.
@@ -241,7 +241,7 @@ phony :: (Monad m)
   => String -- ^ A name of phony target
   -> A' m ()
 phony name = do
-  produce (fromFilePath "<phony>" name :: File)
+  produce (fromFilePath toplevelModule name :: File)
   markPhony
 
 -- | Mark the recipe as 'INTERMEDIATE' i.e. claim that all it's targets may be
@@ -254,7 +254,7 @@ markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) 
 readFileForMake :: (MonadMake m)
   => File -- ^ File to read contents of
   -> m BS.ByteString
-readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (toFilePath f)))
+readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (topRel f)))
 
 -- | CommandGen is a recipe-builder packed in the newtype to prevent partial
 -- expantion of it's commands

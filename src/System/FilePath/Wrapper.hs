@@ -18,18 +18,11 @@ data FileT h a = FileT h a
   deriving(Show,Eq,Ord,Data,Typeable)
 
 -- | Convert File back to FilePath
-toFilePath :: (FileT h FilePath) -> FilePath
-toFilePath (FileT _ f) = f
+-- toFilePath :: (FileT h FilePath) -> FilePath
+-- toFilePath (FileT _ f) = f
 
 fromFilePath :: h -> FilePath -> FileT h FilePath
 fromFilePath h f = FileT h f
-
--- | Convert File back to FilePath with escaped spaces
-escapeFile :: FileT h FilePath -> FilePath
-escapeFile f = escapeFile' (toFilePath f) where
-  escapeFile' [] = []
-  escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
-  escapeFile' (x:xs) = (x:(escapeFile' xs))
 
 -- instance (Monoid a, Monoid h) => Monoid (FileT h a) where
 --   mempty = FileT mempty mempty

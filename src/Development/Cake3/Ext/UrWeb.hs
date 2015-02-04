@@ -21,6 +21,7 @@ import Text.Printf
 import qualified System.FilePath as F
 
 import System.FilePath.Wrapper
+import Development.Cake3.Types
 import Development.Cake3.Monad
 import Development.Cake3 hiding (many, (<|>))
 import Development.Cake3.Ext.UrEmbed.Types (uwModName,css_mangle_flag)
@@ -127,13 +128,15 @@ data UrpState = UrpState {
   , urautogen :: String
   } deriving (Show)
 
-defState urp = UrpState (Urp urp Nothing [] [] []) "autogen"
+defUrp f = Urp f Nothing [] [] []
+
+defState f = UrpState (defUrp f) "autogen"
 
 -- | Returns autogen dir for the current module's file
 autogenDir :: (Monad m) => File -> UrpGen m File
-autogenDir (FileT hint path) = do
+autogenDir (FileT l@(ModuleLocation t2m m2t) path) = do
   ag <- (urautogen `liftM` get)
-  return (FileT hint (hint </> ag))
+  return $ FileT l ag
 
 class ToUrpWord a where
   toUrpWord :: a -> String
@@ -151,35 +154,35 @@ instance ToUrpWord UrpRewrite where
   toUrpWord (UrpTable) = "table"
 
 class ToUrpLine a where
-  toUrpLine :: FilePath -> a -> String
+  toUrpLine :: File -> a -> String
 
 maskPkgCfg s = "%" ++ (map toUpper s) ++ "%"
 
 instance ToUrpLine UrpHdrToken where
-  toUrpLine up (UrpDatabase dbs) = printf "database %s" dbs
-  toUrpLine up (UrpSql f) = printf "sql %s" (up </> toFilePath f)
-  toUrpLine up (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
-  toUrpLine up (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
-  toUrpLine up (UrpLibrary f)
-    | (takeFileName f) == "lib.urp" = printf "library %s" (up </> toFilePath (takeDirectory f))
-    | otherwise = printf "library %s" (up </> toFilePath (dropExtension f))
-  toUrpLine up (UrpDebug) = printf "debug"
-  toUrpLine up (UrpInclude f) = printf "include %s" (up </> toFilePath f)
-  toUrpLine up (UrpLink f []) = printf "link %s" (up </> toFilePath f)
-  toUrpLine up (UrpLink f lfl) = printf "link %s\nlink %s" (up </> toFilePath f) lfl
-  toUrpLine up (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
-  toUrpLine up (UrpFFI s) = printf "ffi %s" (up </> toFilePath (dropExtensions s))
-  toUrpLine up (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
-  toUrpLine up (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
-  toUrpLine up (UrpScript s) = printf "script %s" s
-  toUrpLine up (UrpClientOnly s) = printf "clientOnly %s" s
+  toUrpLine t (UrpDatabase dbs) = printf "database %s" dbs
+  toUrpLine t (UrpSql f) = printf "sql %s" (route t f)
+  toUrpLine t (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
+  toUrpLine t (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
+  toUrpLine t (UrpLibrary f)
+    | (takeFileName f) == "lib.urp" = printf "library %s" (route t (takeDirectory f))
+    | otherwise = printf "library %s" (route t (dropExtension f))
+  toUrpLine t (UrpDebug) = printf "debug"
+  toUrpLine t (UrpInclude f) = printf "include %s" (route t f)
+  toUrpLine t (UrpLink f []) = printf "link %s" (route t f)
+  toUrpLine t (UrpLink f lfl) = printf "link %s\nlink %s" (route t f) lfl
+  toUrpLine t (UrpPkgConfig s) = printf "link %s" (maskPkgCfg s)
+  toUrpLine t (UrpFFI s) = printf "ffi %s" (route t (dropExtensions s))
+  toUrpLine t (UrpSafeGet s) = printf "safeGet %s" (dropExtensions s)
+  toUrpLine t (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
+  toUrpLine t (UrpScript s) = printf "script %s" s
+  toUrpLine t (UrpClientOnly s) = printf "clientOnly %s" s
 
 instance ToUrpLine UrpModToken where
-  toUrpLine up (UrpModule1 f) = up </> toFilePath (dropExtensions f)
-  toUrpLine up (UrpModule2 f f2)
-    | (dropExtensions f) == (dropExtensions f2) = up </> toFilePath (dropExtensions f)
-    | otherwise = error $ printf "ur: File names should match, got %s, %s" (toFilePath f) (toFilePath f2)
-  toUrpLine up (UrpModuleSys s) = printf "$/%s" s
+  toUrpLine t (UrpModule1 f) = route t (dropExtensions f)
+  toUrpLine t (UrpModule2 f f2)
+    | (dropExtensions f) == (dropExtensions f2) = route t (dropExtensions f)
+    | otherwise = error $ printf "ur: File names should match, got %s, %s" (route t f) (route t f2)
+  toUrpLine t (UrpModuleSys s) = printf "$/%s" s
 
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
@@ -188,10 +191,12 @@ runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,UrpState)
 runUrpGen f m = runStateT (unUrpGen m) (defState f)
 
 tempPrefix :: File -> String
-tempPrefix f = concat $ map (map nodot) $ splitDirectories f where
-  nodot '.' = '_'
-  nodot '/' = '_'
-  nodot a = a
+tempPrefix f = munglePath $ topRel f where
+
+munglePath :: FilePath -> String
+munglePath = map plain where
+  plain a | (not $ isAlphaNum a) = '_'
+          | otherwise = a
 
 -- | Produce fixed-content rule using @f as a uniq name template, add additional
 -- dependencies @ds
@@ -209,7 +214,7 @@ urcflags = extvar "UR_CFLAGS"
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
   ((),s) <- runUrpGen urpfile m
-  let u@(Urp _ _ hdr mod srcs) = urpst s
+  let u@(Urp tgt _ hdr mod srcs) = urpst s
   let pkgcfg = (urpPkgCfg u)
 
   os <- forM srcs $ \(SrcFile src cfl lfl) -> do
@@ -219,14 +224,14 @@ uwlib urpfile m = do
         rule' $ shell1 [cmd| $gxx -c $urcflags $urincl $cflags -o @(src .= "o") $src |]
       ".c" -> do
         rule' $ shell1 [cmd| $gcc -c $urincl $urcflags $cflags -o @(src .= "o") $src |]
-      e -> fail ("Source type not supported (by extension) " ++ (toFilePath src)))
+      e -> fail ("Source type not supported (by extension) " ++ (topRel src)))
     return $ UrpLink (snd o) lfl
 
   urpfile' <- genIn (urpfile .= "in") (urpDeps u) $ do
-    forM hdr (line . toUrpLine (urpUp urpfile))
-    forM os (line . toUrpLine (urpUp urpfile))
+    forM hdr (line . toUrpLine tgt)
+    forM os (line . toUrpLine tgt)
     line ""
-    forM mod (line . toUrpLine (urpUp urpfile))
+    forM mod (line . toUrpLine tgt)
 
   rule' $ do
     let cpy = [cmd|cat $urpfile'|] :: CommandGen' (Make' IO)
@@ -268,8 +273,25 @@ allow a s = addHdr $ UrpAllow a s
 rewrite :: (MonadMake m) => UrpRewrite -> String -> UrpGen m ()
 rewrite a s = addHdr $ UrpRewrite a s
 
-urpUp :: File -> FilePath
-urpUp f = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory $ toFilePath f
+-- addDot f = addDot' $ F.normalise f where
+--   addDot' "." = "."
+--   addDot' p = "."</>p
+
+-- routeM :: (MonadMake m) => File -> UrpGen m File
+-- routeM his = do
+--   my <- urp `liftM` urpst `liftM` get
+--   return $ route my his
+
+-- Down from module to file
+-- urpDown :: File -> FilePath
+-- urpDown (FileT hint path) = F.makeRelative hint path
+
+-- wayback x = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory x
+
+-- -- Up to the Cake module's top dir
+-- urpUp :: File -> FilePath
+-- urpUp f = wayback $ mkrel f where
+--   mkrel (FileT hint path) = F.makeRelative hint path
 
 class LibraryDecl x where
   library :: (MonadMake m) => x -> UrpGen m ()
@@ -278,7 +300,7 @@ instance LibraryDecl [File] where
   library  ls = do
     forM_ ls $ \l -> do
       when ((takeExtension l) /= ".urp") $ do
-        fail $ printf "library declaration '%s' should ends with '.urp'" (toFilePath l)
+        fail $ printf "library declaration '%s' should ends with '.urp'" (topRel l)
       addHdr $ UrpLibrary l
 
 instance LibraryDecl UWLib where
@@ -294,7 +316,7 @@ externalMake3 ::
   -> String -- ^ The name of the target to run
   -> Make [File]
 externalMake3 mk f tgt = do
-  prebuildS [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk) $(string tgt) |]
+  prebuildS [cmd|$(make) -C $(string $ topRel $ takeDirectory mk) -f $(string $ takeFileName mk) $(string tgt) |]
   return [f]
 
 -- | Build a file using external Makefile facility.
@@ -303,7 +325,7 @@ externalMake' ::
   -> File -- ^ External file to refer to
   -> Make [File]
 externalMake' mk f = do
-  prebuildS [cmd|$(make) -C $(string $ toFilePath $ takeDirectory mk) -f $(string $ takeFileName mk)|]
+  prebuildS [cmd|$(make) -C $(string $ topRel $ takeDirectory mk) -f $(string $ takeFileName mk)|]
   return [f]
 
 -- | Build a file from external project. It is expected, that this project has a
@@ -421,19 +443,31 @@ embed' :: (MonadMake m) => [String] -> Bool -> File -> UrpGen m ()
 embed' ueo' js_ffi f = do
   let ueo = unwords $ map ("--" ++) ueo'
   a <- autogenDir f
-  let intermed f suffix ext = (a </> ((map (\x -> case x of '.' -> '_' ; _ -> x) (takeFileName f)) ++ suffix)) .= ext
+  let intermed f suffix ext = (a </> ((munglePath (takeFileName f)) ++ suffix)) .= ext
   let c = intermed f "_c" "c"
   let h = intermed f "_c" "h"
   let s = intermed f "_c" "urs"
   let w = intermed f "" "ur"
-  let j = if js_ffi then ("-j " ++ (toFilePath $ intermed f "_js" "urs")) else ""
-  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $f|]
-  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $(string j) $c |])
+  j <- (if js_ffi then do
+         let js = intermed f "_js" "urs"
+         ffi js
+         return ("-j " ++ (topRel js))
+       else
+         return "")
+  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $(string j) $f|]
+  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $c |])
   ffi s
   include h
   link o
   ur w
-  safeGet $ printf "%s/content" (uwModName $ toFilePath w)
+  safeGet $ printf "%s/content" (uwModName $ topRel w)
+
+  -- u <- urp `liftM` urpst `liftM` get
+  -- liftMake $ liftIO $ do
+  --   putStrLn $ show a
+  --   putStrLn $ show u
+  --   putStrLn $ show w
+  --   putStrLn $ route u w
 
 class EmbedDecl x where
   embed :: (MonadMake m) => x -> UrpGen m ()
@@ -447,7 +481,7 @@ mangled :: File -> Make Mangled_File
 mangled f
   | (takeExtension f) == ".css" = return $ CSS_File f
   | (takeExtension f) == ".js" = return $ JS_File f
-  | otherwise = fail $ "mangled: Mangling is defined for .css and .js files only (got " ++ toFilePath f ++ ")"
+  | otherwise = fail $ "mangled: Mangling is defined for .css and .js files only (got " ++ topRel f ++ ")"
 
 instance EmbedDecl Mangled_File where
   embed (CSS_File f) = embed' [css_mangle_flag] False f
