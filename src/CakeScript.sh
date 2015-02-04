@@ -50,11 +50,11 @@ cake3 = tool "cake3"
 selfUpdate :: Make [File]
 selfUpdate = do
   makefile <- outputFile <$> get
-  (_,cg) <- rule2 $ do
+  (_,cg) <- rule' $ do
     depend cakefiles
     produce (file "Cakegen")
     shell [cmd|\$(cake3)|]
-  (_,f) <- rule2 $ do
+  (_,f) <- rule' $ do
     depend cg
     produce makefile
     shell [cmd|\$(cakegen)|]

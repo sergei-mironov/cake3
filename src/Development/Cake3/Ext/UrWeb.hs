@@ -233,7 +233,7 @@ uwlib urpfile m = do
     let cc = makevar "URCC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
     let cpp = makevar "URCPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
     let incfl = extvar "UR_CFLAGS"
-    rule2 $ do
+    rule' $ do
       case takeExtension c of
         ".cpp" -> shell [cmd| $cpp -c $incfl $i $(string flags) -o @(c .= "o") $(c) |]
         ".c" -> shell [cmd| $cc -c $i $incfl $(string flags) -o @(c .= "o") $(c) |]
