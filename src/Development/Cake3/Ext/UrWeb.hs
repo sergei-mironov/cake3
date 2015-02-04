@@ -329,13 +329,19 @@ addMod m = modify $ \s -> let u = urpst s in s { urpst = u { umod = (umod u) ++ 
 
 class ModuleDecl x where
   ur :: (Monad m) => x -> UrpGen m ()
+
 instance ModuleDecl File where
   ur = addMod . UrpModule1
+
+instance ModuleDecl UrpModToken where
+  ur = addMod
+
 instance ModuleDecl (File,File) where
   ur (f1,f2) = addMod $ UrpModule2 f1 f2
-instance ModuleDecl String where
-  ur = addMod .UrpModuleSys
 
+sys = UrpModuleSys
+
+pair f = UrpModule2 (f.="ur") (f.="urs")
 
 debug :: (MonadMake m) => UrpGen m ()
 debug = addHdr UrpDebug

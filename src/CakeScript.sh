@@ -21,7 +21,7 @@ import Control.Monad.State
 import Development.Cake3
 import Development.Cake3.Monad
 import Development.Cake3.Utils.Find
-import GHC.Exts (IsString(..))
+-- import GHC.Exts (IsString(..))
 
 pl = ProjectLocation projectroot moduleroot
 
