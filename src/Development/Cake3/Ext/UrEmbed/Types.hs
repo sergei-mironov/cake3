@@ -11,6 +11,7 @@ data Args = A
   , out_urs :: FilePath
   , out_wrapper :: FilePath
   , out_ffi_js :: FilePath
+  , mangle_css_url :: Bool
   , inp :: FilePath
   }
 
@@ -21,12 +22,14 @@ guessModName = uwModName . (++ ".urs")
 uwModName :: FilePath -> String
 uwModName = upper1 . notnum . map under . takeFileName . dropExtension . checkurs where
   checkurs x | (takeExtension x) == ".urs" = x
+             | (takeExtension x) == ".ur" = x
              | otherwise = error $ "uwModName: FILE.urs expected (got " ++ x ++ ")"
   under c | c`elem`"_-. /" = '_'
           | otherwise = c
   upper1 [] = []
   upper1 (x:xs) = (toUpper x) : xs
-  notnum n@(x:xs) | isDigit x = error $ "Names starting from digit is not allowed (got " ++ n ++ ")"
+  notnum [] = error $ "uwModName: Empty name"
+  notnum n@(x:xs) | isDigit x = error $ "uwModName: Names starting from digit is not allowed (got " ++ n ++ ")"
                   | otherwise = n
 
 
@@ -37,4 +40,6 @@ cblobfun a = printf "uw_%s_%s" (uwModName (out_urs a)) urblobfun
 ctextfun a = printf "uw_%s_%s" (uwModName (out_urs a)) urtextfun
 
 type Url = String
+
+css_mangle_flag = "css-mangle-urls"
 

@@ -23,6 +23,7 @@ import qualified System.FilePath as F
 import System.FilePath.Wrapper
 import Development.Cake3.Monad
 import Development.Cake3 hiding (many, (<|>))
+import Development.Cake3.Ext.UrEmbed.Types (uwModName,css_mangle_flag)
 
 data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
   deriving(Show,Data,Typeable)
@@ -135,6 +136,9 @@ data UrpState = UrpState {
   } deriving (Show)
 
 defState urp = UrpState (Urp urp Nothing [] []) (fromFilePath "autogen")
+
+autogenDir :: (Monad m) => UrpGen m File
+autogenDir = urautogen `liftM` get
 
 class ToUrpWord a where
   toUrpWord :: a -> String
@@ -255,6 +259,7 @@ uwapp uwflags urpfile m = do
     unsafeShell [cmd|urweb $(string uwflags) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
   return $ UWExe u
 
+addHdr :: (MonadMake m) => UrpHdrToken -> UrpGen m ()
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
 
 database :: (MonadMake m) => String -> UrpGen m ()
@@ -346,23 +351,29 @@ include = addHdr . UrpInclude
 
 
 class LinkDecl x where
-  link :: (Monad m) => x -> UrpGen m () 
+  link :: (MonadMake m) => x -> UrpGen m () 
 
 instance LinkDecl (File,String) where
   link (f,fl) = addHdr $ UrpLink f fl
 
 instance LinkDecl File where
-  link f = link (f,"")
+  link f = addHdr $ UrpLink f ""
+
+instance (LinkDecl x) => LinkDecl (Make' IO x) where
+  link  ml = liftMake ml >>= link
 
 
 class SrcDecl x where
-  src :: (Monad m) => x -> UrpGen m ()
+  src :: (MonadMake m) => x -> UrpGen m ()
 
 instance SrcDecl (File,String,String) where
   src (f,cfl,lfl) = addHdr $ UrpSrc f cfl lfl
 
 instance SrcDecl File where
   src f = src (f,"","")
+
+instance SrcDecl x => SrcDecl (Make x) where
+  src  ml = liftMake ml >>= src
 
 
 
@@ -400,6 +411,47 @@ script = addHdr . UrpScript
 
 pkgconfig :: (MonadMake m) => String -> UrpGen m ()
 pkgconfig = addHdr . UrpPkgConfig
+
+urembed = tool "urembed"
+
+embed' :: (MonadMake m) => [String] -> Bool -> File -> UrpGen m ()
+embed' ueo' js_ffi f = do
+  let ueo = unwords $ map ("--" ++) ueo'
+  a <- autogenDir
+  let intermed f suffix ext = (a </> ((map (\x -> case x of '.' -> '_' ; _ -> x) (takeFileName f)) ++ suffix)) .= ext
+  let c = intermed f "_c" "c"
+  let h = intermed f "_c" "h"
+  let s = intermed f "_c" "urs"
+  let w = intermed f "" "ur"
+  let j = if js_ffi then ("-j " ++ (toFilePath $ intermed f "_js" "urs")) else ""
+  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $f|]
+  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $(string j) $c |])
+  ffi s
+  include h
+  link o
+  ur w
+  safeGet $ printf "%s/content" (uwModName $ toFilePath w)
+
+class EmbedDecl x where
+  embed :: (MonadMake m) => x -> UrpGen m ()
+
+instance EmbedDecl File where
+  embed = embed' [] False
+
+data Mangled_File = CSS_File File | JS_File File
+
+mangled :: File -> Make Mangled_File
+mangled f
+  | (takeExtension f) == ".css" = return $ CSS_File f
+  | (takeExtension f) == ".js" = return $ JS_File f
+  | otherwise = fail $ "mangled: Mangling is defined for .css and .js files only (got " ++ toFilePath f ++ ")"
+
+instance EmbedDecl Mangled_File where
+  embed (CSS_File f) = embed' [css_mangle_flag] False f
+  embed (JS_File f) = embed' [] True f
+
+instance EmbedDecl x => EmbedDecl (Make x) where
+  embed ml = liftMake ml >>= embed
 
 -- t1 :: Make ((),UrpState)
 -- t1 = runUrpGen (file "Script.urp") $ do

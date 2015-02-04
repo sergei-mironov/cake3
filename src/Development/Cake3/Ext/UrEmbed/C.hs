@@ -113,10 +113,11 @@ mk_wrap a us open_js_ffi = toFile (out_wrapper a) $ do
   line $ "fun content {} = b <- "++ urblobfun ++ " () ; returnBlob b (blessMime \"" ++ mm ++ "\")"
   line $ "val propagated_urls : list url = "
   forM_ us $ \u -> do
-    line $ "    " ++ u ++ ".geturl ::"
+    line $ "    " ++ u ++ ".url ::"
   line $ "    []"
   when (open_js_ffi) $ do
     line $ "open " ++ (uwModName (out_ffi_js a))
+  line $ "val url = url(content {})"
 
 mk_js_wrap :: Args -> ([JSType],[JSFunc]) -> IO ()
 mk_js_wrap a (jt,jf) = do

@@ -25,7 +25,8 @@ pargs = A
   <*> strOption (short 'H' <> metavar "FILE.h" <> help "Output header file")
   <*> strOption (short 's' <> metavar "FILE.urs" <> help "Output Ur/Web signature file")
   <*> strOption (short 'w' <> metavar "FILE.ur" <> help "Output Ur/Web wrapper")
-  <*> strOption (short 'j' <> metavar "FILE.urs" <> help "Output Ur/Web JS FFI signatures")
+  <*> strOption (short 'j' <> metavar "FILE.urs" <> help "Output Ur/Web JS FFI signatures" <> value "")
+  <*> switch (long css_mangle_flag <> help "Convert CSS url references to Ur/Web style")
   <*> argument str (metavar "FILE" <> help "File to embed")
 
 
@@ -47,7 +48,7 @@ main_ a
 
     c <-  ByteString.readFile (inp a)
 
-    (c,u) <- if takeExtension (inp a) == ".css" then
+    (c,u) <- if takeExtension (inp a) == ".css" && (mangle_css_url a) then
                case parse_css c of
                 Left e -> do
                   hPutStrLn stderr $ "Warning: CSS parser failed ("++ (show e) ++ "), URL tracking disabled"

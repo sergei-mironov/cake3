@@ -68,6 +68,7 @@ library
                      System.FilePath.Wrapper
                      Development.Cake3.Monad
                      Development.Cake3.Ext.UrWeb
+                     Development.Cake3.Ext.UrEmbed.Types
                      Development.Cake3.Utils.Find
                      Development.Cake3.Utils.Slice
                      Text.QuasiMake
