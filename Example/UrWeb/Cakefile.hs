@@ -1,7 +1,7 @@
 module Cakefile where
 
 import Development.Cake3
-import Development.Cake3.Ext.UrWeb2
+import Development.Cake3.Ext.UrWeb
 import Cakefile_P
 
 main = writeMake (file "Makefile") $ do
