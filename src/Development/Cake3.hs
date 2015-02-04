@@ -25,9 +25,8 @@ module Development.Cake3 (
   , MonadMake(..)
 
   -- Rules
-  , rule
-  , rule2
   , rule'
+  , rule
   , phony
   , depend
   , produce
@@ -43,6 +42,7 @@ module Development.Cake3 (
   , (</>)
   , toFilePath
   , readFileForMake
+  , genFile'
   , genFile
 
   -- Make parts
@@ -173,40 +173,47 @@ withPlacement mk = do
 -- > let c = file "main.c"
 -- > rule $ shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
 --
-rule2 :: (MonadMake m)
+rule' :: (MonadMake m)
   => A a -- ^ Recipe builder
   -> m (Recipe,a) -- ^ The recipe itself and the recipe builder's result
-rule2 act = liftMake $ do
+rule' act = liftMake $ do
   loc <- getLoc
   (r,a) <- runA loc act
   addRecipe r
   return (r,a)
 
--- | A version of rule2. Rule places it's recipe above all recipies defined so
--- far.
-rule
-  :: A a    -- ^ Recipe builder
-  -> Make a
-rule act = snd <$> withPlacement (rule2 act)
+-- | Create the rule, place it's recipe above all recipies defined so far. See
+-- rule' for other details
+rule :: (MonadMake m)
+  => A a    -- ^ Recipe builder
+  -> m a
+rule act = snd `liftM` withPlacement (rule' act)
 
 -- | A version of rule, without monad set explicitly
-rule' :: (MonadMake m) => A a -> m a
-rule' act = liftMake $ snd <$> withPlacement (rule2 act)
+-- rule' :: (MonadMake m) => A a -> m a
+-- rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
-
-genFile :: File -> String -> Make File
-genFile tgt cnt = rule' $do
-  shell [cmd|( \|]
-  forM_ (lines cnt) $ \l -> do
-    shell [cmd|echo $(string (quote l))  ;\|]
-  shell [cmd|) > @tgt|]
-  return tgt
+-- | Build a rule for creating file @tgt with a fixed content @cnt, use
+-- additional actions @a for the recipe
+genFile' :: File -> String -> A () -> Make File
+genFile' tgt cnt act =
+  rule $ do
+    shell [cmd|( \|]
+    forM_ (lines cnt) $ \l -> do
+      shell [cmd|echo $(string (quote l))  ;\|]
+    shell [cmd|) > @tgt|]
+    act
+    return tgt
   where
     quote [] = []
     quote ('$':cs) = '$':'$':(quote cs)
     quote (x:cs)
       | not (isAlphaNum x) = '\\':x:(quote cs)
       | otherwise = x : (quote cs)
+
+-- | See @genFile'
+genFile :: File -> String -> Make File
+genFile f c = genFile' f c (return ())
 
 -- FIXME: buggy function, breaks commutativity
 -- genTmpFile :: (MonadMake m) => String -> m File
@@ -215,4 +222,29 @@ genFile tgt cnt = rule' $do
 -- FIXME: buggy function, breaks commutativity
 -- genTmpFileWithPrefix :: (MonadMake m) => String -> String -> m File
 -- genTmpFileWithPrefix pfx cnt = tmpFile pfx >>= \f -> genFile f cnt
+
+
+
+--
+-- TESTS
+--
+
+t1 :: Make ()
+t1 = do
+  rule $ do
+    a <- rule $ shell1 [cmd|echo a > @(file "a")|]
+    shell [cmd|cp $a @(file "b")|]
+  return ()
+  where
+    file = file' (ProjectLocation "." ".") 
+
+
+
+
+
+
+
+
+
+
 

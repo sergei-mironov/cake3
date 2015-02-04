@@ -201,20 +201,20 @@ class (Monad m, Monad t) => MonadAction t m | t -> m where
 instance (Monad m) => MonadAction (A' m) m where
   liftAction = id
 
--- | Run the Action monad, using already existing Recipe as input.
+-- | Fill recipe @r using the action @act by running the action monad
 runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
 runA' r act = do
   (a,r) <- runStateT (unA' act) r
   return (r,a)
 
--- | Create new empty recipe and run action on it.
+-- | Create an empty recipe, fill it using action @act
 runA :: (Monad m)
   => String -- ^ Location string (in the Cakefile.hs)
   -> A' m a -- ^ Recipe builder
   -> m (Recipe, a)
 runA loc act = runA' (emptyRecipe loc) act
 
--- | Version of runA discarding the result of A's computation
+-- | Version of runA discarding the result of computation
 runA_ :: (Monad m) => String -> A' m a -> m Recipe
 runA_ loc act = runA loc act >>= return .fst
 
@@ -283,6 +283,13 @@ shell cmdg = do
   commands [line]
   r <- get
   return (S.toList (rtgt r))
+
+-- | Version of @shell returning a single file
+shell1 :: (Monad m) => CommandGen' m -> A' m File
+shell1 = shell >=> (\x -> case x of
+  [] -> fail "shell1: Error, no targets defined"
+  (f:[]) -> return f
+  (f:fs) -> fail "shell1: Error, multiple targets defined")
 
 -- | Version of @shell@ which doesn't track it's dependencies
 unsafeShell :: (Monad m) => CommandGen' m -> A' m [File]
