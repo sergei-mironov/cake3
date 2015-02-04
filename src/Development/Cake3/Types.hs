@@ -176,6 +176,7 @@ extvar n = var n Nothing
 -- | Reref to special variable @$(MAKE)@
 make = extvar "MAKE"
 
--- | Simple wrapper for FilePath.
-type File = FileT FilePath
+-- | Simple wrapper for FilePath. The first type argument is a Hint, containing
+-- the path to the current module
+type File = FileT FilePath FilePath
 

@@ -94,7 +94,7 @@ addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
 tmp_file :: String -> File
-tmp_file pfx = (fromFilePath (".cake3" </> ("tmp_"++ pfx )))
+tmp_file pfx = (fromFilePath "." (".cake3" </> ("tmp_"++ pfx )))
 
 prebuild, postbuild, prebuildS, postbuildS :: (MonadMake m) => CommandGen -> m ()
 
@@ -241,7 +241,7 @@ phony :: (Monad m)
   => String -- ^ A name of phony target
   -> A' m ()
 phony name = do
-  produce (fromFilePath name :: File)
+  produce (fromFilePath "<phony>" name :: File)
   markPhony
 
 -- | Mark the recipe as 'INTERMEDIATE' i.e. claim that all it's targets may be

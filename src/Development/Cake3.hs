@@ -91,8 +91,8 @@ import Development.Cake3.Monad
 import System.FilePath.Wrapper as W
 
 data ProjectLocation = ProjectLocation {
-    root :: FilePath -- ^ Path (absolute) to main project's top dir
-  , off :: FilePath -- ^ Offset to the current project module
+    root :: FilePath -- ^ Path (absolute) to main project's top dir (for which the Makefile is to be generated)
+  , off :: FilePath -- ^ Path (absolute) to the current module
   } deriving (Show, Eq, Ord)
 
 currentDirLocation :: (MonadIO m) => m ProjectLocation
@@ -103,8 +103,9 @@ currentDirLocation = do
 -- | Converts string representation of Path into type-safe File. Internally,
 -- files are stored as a relative offsets from the project root directory
 file' :: ProjectLocation -> String -> File
-file' pl f = fromFilePath (addDot (F.normalise rel)) where
+file' pl f = fromFilePath hint (addDot (F.normalise rel)) where
   rel = makeRelative (root pl) ((off pl) </> (F.dropTrailingPathSeparator f))
+  hint = makeRelative (root pl) (off pl)
   addDot "." = "."
   addDot p = "."</>p
 

@@ -67,7 +67,7 @@ fresh = do
 
 runMakeLL :: String -> MakeLL () -> Set Recipe
 runMakeLL templ m = snd $ execState (unMakeLL m) (names, S.empty) where
-  names = map fromFilePath $ map (\x -> printf ".%s%d" templ x) $ ([1..] :: [Int])
+  names = map (fromFilePath "") $ map (\x -> printf ".%s%d" templ x) $ ([1..] :: [Int])
 
 copyRecipeLL :: Recipe -> MakeLL ()
 copyRecipeLL r = modify (\(a,b) -> (a,S.insert r b))
@@ -167,7 +167,7 @@ completeMultiTarget rs =
 hasClean :: (Foldable t) => t Recipe -> Bool
 hasClean rs = F.foldl' flt False rs where
   flt True _ = True
-  flt False r = (Phony `S.member`(rflags r)) && ((fromFilePath "clean")`S.member`(rtgt r))
+  flt False r = (Phony `S.member`(rflags r)) && ((fromFilePath "<phony>" "clean")`S.member`(rtgt r))
 
 cleanRuleLL :: Set File -> MakeLL Recipe
 cleanRuleLL fs =
@@ -186,7 +186,7 @@ defineClean mk fs =
 
 -- | Default Makefile location
 defaultMakefile :: File
-defaultMakefile = fromFilePath ("." </> "Makefile")
+defaultMakefile = fromFilePath "." ("." </> "Makefile")
 
 addRebuildDeps :: File -> Set File -> Set Recipe -> Set Recipe
 addRebuildDeps makefile deps rs = S.map mkd rs where

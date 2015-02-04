@@ -14,26 +14,26 @@ import qualified Data.Map as M
 import Data.Monoid
 import Text.Printf
 
-newtype FileT a = FileT a
+data FileT h a = FileT h a
   deriving(Show,Eq,Ord,Data,Typeable)
 
 -- | Convert File back to FilePath
-toFilePath :: (FileT FilePath) -> FilePath
-toFilePath (FileT f) = f
+toFilePath :: (FileT h FilePath) -> FilePath
+toFilePath (FileT _ f) = f
 
-fromFilePath :: FilePath -> FileT FilePath
-fromFilePath f = FileT f
+fromFilePath :: h -> FilePath -> FileT h FilePath
+fromFilePath h f = FileT h f
 
 -- | Convert File back to FilePath with escaped spaces
-escapeFile :: FileT FilePath -> FilePath
+escapeFile :: FileT h FilePath -> FilePath
 escapeFile f = escapeFile' (toFilePath f) where
   escapeFile' [] = []
   escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
   escapeFile' (x:xs) = (x:(escapeFile' xs))
 
-instance (Monoid a) => Monoid (FileT a) where
-  mempty = FileT mempty
-  mappend (FileT a) (FileT b) = FileT (a`mappend`b)
+-- instance (Monoid a, Monoid h) => Monoid (FileT h a) where
+--   mempty = FileT mempty mempty
+--   mappend (FileT h1 a) (FileT h2 b) = FileT (a`mappend`b)
 
 class FileLike a where
   -- fromFilePath :: FilePath -> a
@@ -57,19 +57,21 @@ class FileLike a where
 (.=) :: (FileLike a) => a -> String -> a
 (.=) = replaceExtension
 
-instance FileLike a => FileLike (FileT a) where
+instance (Eq h, Show h, FileLike a) => FileLike (FileT h a) where
   -- fromFilePath fp = FileT (fromFilePath fp)
-  combine (FileT a) b = FileT (combine a b)
-  takeBaseName (FileT a) = takeBaseName a
-  takeFileName (FileT a) = takeFileName a
-  takeExtension (FileT a) = takeExtension a
-  takeExtensions (FileT a) = takeExtensions a
-  makeRelative (FileT a) (FileT b) = FileT (makeRelative a b)
-  replaceExtension (FileT a) ext = FileT (replaceExtension a ext)
-  takeDirectory (FileT a) = FileT (takeDirectory a)
-  dropExtensions (FileT a) = FileT (dropExtensions a)
-  dropExtension (FileT a) = FileT (dropExtension a)
-  splitDirectories (FileT a) = splitDirectories a
+  combine (FileT h a) b = FileT h (combine a b)
+  takeBaseName (FileT _ a) = takeBaseName a
+  takeFileName (FileT _ a) = takeFileName a
+  takeExtension (FileT _ a) = takeExtension a
+  takeExtensions (FileT _ a) = takeExtensions a
+  makeRelative (FileT h1 a) (FileT h2 b)
+    | h1 == h2 = FileT h1 (makeRelative a b)
+    | otherwise = error $ "makeRelative: FileT, hints are different: " ++ (show h1) ++ " <> " ++ (show h2)
+  replaceExtension (FileT h a) ext = FileT h (replaceExtension a ext)
+  takeDirectory (FileT h a) = FileT h (takeDirectory a)
+  dropExtensions (FileT h a) = FileT h (dropExtensions a)
+  dropExtension (FileT h a) = FileT h (dropExtension a)
+  splitDirectories (FileT _ a) = splitDirectories a
 
 instance FileLike FilePath where
   -- fromFilePath = id

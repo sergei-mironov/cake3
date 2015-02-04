@@ -124,13 +124,16 @@ urpPkgCfg (Urp _ _ hdr _ _) = foldl' scan [] hdr where
 
 data UrpState = UrpState {
     urpst :: Urp
-  , urautogen :: File
+  , urautogen :: String
   } deriving (Show)
 
-defState urp = UrpState (Urp urp Nothing [] [] []) (fromFilePath "autogen")
+defState urp = UrpState (Urp urp Nothing [] [] []) "autogen"
 
-autogenDir :: (Monad m) => UrpGen m File
-autogenDir = urautogen `liftM` get
+-- | Returns autogen dir for the current module's file
+autogenDir :: (Monad m) => File -> UrpGen m File
+autogenDir (FileT hint path) = do
+  ag <- (urautogen `liftM` get)
+  return (FileT hint (hint </> ag))
 
 class ToUrpWord a where
   toUrpWord :: a -> String
@@ -417,7 +420,7 @@ urembed = tool "urembed"
 embed' :: (MonadMake m) => [String] -> Bool -> File -> UrpGen m ()
 embed' ueo' js_ffi f = do
   let ueo = unwords $ map ("--" ++) ueo'
-  a <- autogenDir
+  a <- autogenDir f
   let intermed f suffix ext = (a </> ((map (\x -> case x of '.' -> '_' ; _ -> x) (takeFileName f)) ++ suffix)) .= ext
   let c = intermed f "_c" "c"
   let h = intermed f "_c" "h"
