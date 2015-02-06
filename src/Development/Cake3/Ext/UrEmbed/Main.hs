@@ -22,7 +22,7 @@ pargs :: Parser Args
 pargs = A
   <$> flag False True ( long "version" <> help "Show version information" )
   <*> strOption (short 'c' <> metavar "FILE.c" <> help "Output C-source")
-  <*> strOption (short 'H' <> metavar "FILE.h" <> help "Output header file")
+  <*> strOption (short 'H' <> metavar "FILE.h" <> help "Output C-header file")
   <*> strOption (short 's' <> metavar "FILE.urs" <> help "Output Ur/Web signature file")
   <*> strOption (short 'w' <> metavar "FILE.ur" <> help "Output Ur/Web wrapper")
   <*> strOption (short 'j' <> metavar "FILE.urs" <> help "Output Ur/Web JS FFI signatures" <> value "")
@@ -58,7 +58,7 @@ main_ a
              else
                return (c,[])
 
-    j <- if (not $ null (out_ffi_js_lib a)) then do
+    j <- if (not $ null (out_ffi_js a)) then do
       pr <- parse_js c
       case pr of
         Left e -> do
@@ -66,7 +66,6 @@ main_ a
           return False
         Right js -> do
           mk_js_wrap a js
-          mk_js_lib a js
           return True
       else
         return False

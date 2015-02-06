@@ -107,31 +107,36 @@ guessMime inf = fixup $ unpack (defaultMimeLookup (fromString inf)) where
   fixup m = m
 
 mk_wrap :: Args -> [Url] -> Bool -> IO ()
-mk_wrap a us open_js_ffi = toFile (out_wrapper a) $ do
-  let mm = guessMime (inp a)
-  line $ "open " ++ (uwModName (out_urs a))
-  line $ "fun content {} = b <- "++ urblobfun ++ " () ; returnBlob b (blessMime \"" ++ mm ++ "\")"
-  line $ "val propagated_urls : list url = "
-  forM_ us $ \u -> do
-    line $ "    " ++ u ++ ".url ::"
-  line $ "    []"
-  when (open_js_ffi) $ do
-    line $ "open " ++ (uwModName (out_ffi_js a))
-  line $ "val url = url(content {})"
-  line $ "val geturl = url"
+mk_wrap a us open_js_ffi = do
+  toFile (out_wrapper a) $ do
+    let mm = guessMime (inp a)
+    line $ "open " ++ (uwModName (out_urs a))
+    line $ "fun content {} = b <- "++ urblobfun ++ " () ; returnBlob b (blessMime \"" ++ mm ++ "\")"
+    line $ "val propagated_urls : list url = "
+    forM_ us $ \u -> do
+      line $ "    " ++ u ++ ".url ::"
+    line $ "    []"
+    when (open_js_ffi) $ do
+      line $ "open " ++ (uwModName (out_ffi_js a))
+    line $ "val url = url(content {})"
+    line $ "val geturl = url"
+    liftIO $ printf "safeGet %s/content\n" (uwModName (out_wrapper a))
+    liftIO $ printf "allow mime %s\n" mm
 
 mk_js_wrap :: Args -> ([JSType],[JSFunc]) -> IO ()
 mk_js_wrap a (jt,jf) = do
+  let m = uwModName (out_ffi_js a)
   toFile (out_ffi_js a) $ do
     forM_ jt $ \decl -> line (urtdecl decl)
-    forM_ jf $ \decl -> line (urdecl decl)
-
-mk_js_lib :: Args -> ([JSType],[JSFunc]) -> IO ()
-mk_js_lib a (jt,jf) = do
-  toFile (out_ffi_js_lib a) $ do
-    let m = uwModName (out_ffi_js a)
-    line $ "ffi " ++ m
     forM_ jf $ \decl -> do
-      line $ (printf "jsFunc %s.%s = %s" m (urname decl) (jsname decl) :: String)
-      line $ (printf "clientOnly %s.%s" m (urname decl) :: String)
+      line (urdecl decl)
+      liftIO $ printf "jsFunc %s.%s = %s\n" m (urname decl) (jsname decl)
+      liftIO $ printf "clientOnly %s.%s\n" m (urname decl)
+
+-- mk_js_lib :: Args -> ([JSType],[JSFunc]) -> IO ()
+-- mk_js_lib a (jt,jf) = do
+--   toFile (out_ffi_js_lib a) $ do
+--     let m = uwModName (out_ffi_js a)
+--     line $ "ffi " ++ m
+--     forM_ jf $ \decl -> do
 

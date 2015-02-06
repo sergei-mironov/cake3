@@ -64,6 +64,7 @@ data Urp = Urp {
   , uhdr :: [UrpHdrToken]
   , umod :: [UrpModToken]
   , srcs :: [SrcFile]
+  , patches :: [File]
   } deriving(Show,Data,Typeable)
 
 newtype UWLib = UWLib Urp
@@ -90,7 +91,7 @@ instance UrpLike UWExe where
   toUrp (UWExe x) = x
 
 urpDeps :: Urp -> [File]
-urpDeps (Urp _ _ hdr mod srcs) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
+urpDeps (Urp _ _ hdr mod srcs _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
   scan1 a (UrpLink f _) = f:a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
@@ -101,7 +102,7 @@ urpDeps (Urp _ _ hdr mod srcs) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty
   scan3 a (SrcFile f _ _) = (f.="o"):a
 
 urpSql' :: Urp -> Maybe File
-urpSql' (Urp _ _ hdr _ _) = find hdr where
+urpSql' (Urp _ _ hdr _ _ _) = find hdr where
   find [] = Nothing
   find ((UrpSql f):hs) = Just f
   find (h:hs) = find hs
@@ -111,7 +112,7 @@ urpSql u = case urpSql' u of
   Nothing -> error "ur project defines no SQL file"
   Just sql -> sql
 
-urpLibs (Urp _ _ hdr _ _) = foldl' scan [] hdr where
+urpLibs (Urp _ _ hdr _ _ _) = foldl' scan [] hdr where
   scan a (UrpLibrary f) = f:a
   scan a _ = a
 
@@ -120,7 +121,7 @@ urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
 
-urpPkgCfg (Urp _ _ hdr _ _) = foldl' scan [] hdr where
+urpPkgCfg (Urp _ _ hdr _ _ _) = foldl' scan [] hdr where
   scan a (UrpPkgConfig s) = s:a
   scan a _ = a
 
@@ -129,7 +130,7 @@ data UrpState = UrpState {
   , urautogen :: String
   } deriving (Show)
 
-defUrp f = Urp f Nothing [] [] []
+defUrp f = Urp f Nothing [] [] [] []
 
 defState f = UrpState (defUrp f) "autogen"
 
@@ -223,7 +224,7 @@ urcflags = extvar "UR_CFLAGS"
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
   ((),s) <- runUrpGen urpfile m
-  let u@(Urp tgt _ hdr mod srcs) = urpst s
+  let u@(Urp tgt _ hdr mod srcs ptch) = urpst s
   let pkgcfg = (urpPkgCfg u)
 
   os <- forM srcs $ \(SrcFile src cfl lfl) -> do
@@ -236,20 +237,25 @@ uwlib urpfile m = do
       e -> fail ("Source type not supported (by extension) " ++ (topRel src)))
     return $ UrpLink (snd o) lfl
 
-  urpfile' <- genIn (urpfile .= "in") (urpDeps u) $ do
+  urp1 <- genIn (urpfile .= "in.1") (urpDeps u) $ do
     forM hdr (line . toUrpLine tgt)
     forM os (line . toUrpLine tgt)
+
+  urp2 <- genIn (urpfile .= "in.2") (urpDeps u) $ do
     line ""
     forM mod (line . toUrpLine tgt)
 
   rule' $ do
-    let cpy = [cmd|cat $urpfile'|] :: CommandGen' (Make' IO)
+    let cpy = [cmd|cat $urp1 |] :: CommandGen' (Make' IO)
     let l = foldl'
             (\a p -> do
               let l = makevar (map toUpper $ printf "lib%s" p) (printf "$(shell pkg-config --libs %s)" p)
               [cmd| $a | sed 's@@$(string $ maskPkgCfg p)@@$l@@'  |]
             ) cpy pkgcfg
     shell [cmd| $l > @urpfile |]
+    when (not $ null ptch) $ do
+      shell [cmd| cat $ptch >> @urpfile |] >> return ()
+    shell [cmd| cat $urp2 >> @urpfile |]
 
   return $ UWLib u
 
@@ -272,6 +278,9 @@ addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ 
 
 addSrc :: (Monad m) => SrcFile -> UrpGen m ()
 addSrc f = modify $ \s -> let u = urpst s in s { urpst = u { srcs = f : (srcs u) } }
+
+addPatch :: (Monad m) => File -> UrpGen m ()
+addPatch f = modify $ \s -> let u = urpst s in s { urpst = u { patches = f : (patches u) } }
 
 database :: (Monad m) => String -> UrpGen m ()
 database dbs = addHdr $ UrpDatabase dbs
@@ -463,18 +472,20 @@ embed' ueo' js_ffi f = do
   let s = intermed f "_c" "urs"
   let w = intermed f "" "ur"
   j <- (if js_ffi then do
-         let jurp = intermed f "_js" "urp"
-         library jurp
-         return ("-j " ++ (topRel jurp))
+         let j = intermed f "_js" "urs"
+         ffi j
+         return ([cmd| -j @j |] :: CommandGen' (Make' IO))
        else
-         return "")
-  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $(string j) $f|]
+         return [cmd||])
+
+  let p = tmp_file $ (tempPrefix f) ++ "_patch"
+  addPatch p
+  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
   o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $c |])
   ffi s
   include h
   link o
   ur w
-  safeGet $ printf "%s/content" (uwModName $ topRel w)
 
   -- u <- urp `liftM` urpst `liftM` get
   -- liftMake $ liftIO $ do
