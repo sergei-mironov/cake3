@@ -21,8 +21,8 @@ import Development.Cake3.Monad
 import Development.Cake3.Writer
 
 -- | Build the full Makefile named @fo@ and a set of 'sliced' versions.
--- 'Slicing' here means filtering out all rules which depends on certain tools
--- (second element of @sls@) and all upstream rules.
+-- 'Slicing' here means filtering out all rules depending on certain tools
+-- (second element of every @sls@ pairs) and all the upstream rules.
 writeSliced :: File -> [(File,[Tool])] -> Make a -> IO ()
 writeSliced fo sls mk = do
   cwd <- currentDirLocation
@@ -31,6 +31,9 @@ writeSliced fo sls mk = do
 
   ecs <- forM sls $ \(fs,ts) -> do
 
+    -- FIXME: We re-evaluate all the @mk@ monad for every sliced version just
+    -- because of target Makefile's name change. We clould have moved @ts@ to
+    -- the MonadReader' layer or similar
     ms <- evalMake fs mk
     let rs = filterRecipesByToolsDeep ts (recipes ms)
     let ts = S.toList $ queryTargets rs

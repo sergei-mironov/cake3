@@ -25,8 +25,14 @@ cat <<EOF
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
-module ${1}_P(file, cakefiles, selfUpdate,filterDirectoryContentsRecursive,
-cakegen, cake3) where
+module ${1}_P(
+  file,
+  cakefiles,
+  selfUpdate,
+  filterDirectoryContentsRecursive,
+  cakegen,
+  cake3
+  ) where
 
 import Control.Monad.Trans
 import Control.Monad.State
@@ -60,7 +66,7 @@ cakefiles =
   let rl = ModuleLocation t2m m2t in
   case "$2" of
     "$TOP" -> map (file' rl) ($3)
-    _ -> error "cakefiles are defined for top-level cake only"
+    _ -> error "cakefiles are defined for top-level cakefile only"
 
 cakegen = tool "./Cakegen"
 cake3 = tool "cake3"
