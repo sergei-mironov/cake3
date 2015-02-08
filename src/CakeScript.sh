@@ -4,6 +4,7 @@ die() { echo "$@" >&2 ; exit 1 ; }
 err() { echo "$@" >&2 ; }
 
 CAKEURL=https://github.com/grwlf/cake3
+ARGS="$@"
 
 # Return relative path from canonical absolute dir path $1 to canonical
 # absolute dir path $2 ($1 and/or $2 may end with one or no "/").
@@ -77,7 +78,7 @@ selfUpdate = do
   (_,cg) <- rule' $ do
     depend cakefiles
     produce (file "Cakegen")
-    shell [cmd|\$(cake3)|]
+    shell [cmd|\$(cake3) $ARGS|]
   (_,f) <- rule' $ do
     depend cg
     produce makefile
@@ -112,9 +113,11 @@ while test -n "$1" ; do
       err "cake3 init"
       err "    - Create the default Cakefile.hs"
       err "cake3 <args>"
-      err "    - Compile the ./Cakegen and run it. Args are passed as is."
+      err "    - Compile the ./Cakegen and run it"
       err ""
-      err "Other arguments are passed to the ./Cakgegen as is"
+      err "-C DIR   scan the tree for Cakefiles starting from DIR"
+      err ""
+      err "Arguments <args> are passed to the ./Cakgegen as is"
       exit 1;
       ;;
     init)
