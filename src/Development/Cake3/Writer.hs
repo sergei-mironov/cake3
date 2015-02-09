@@ -323,7 +323,8 @@ writeRules rs = do
     when (Intermediate `S.member` (rflags r)) $ do
       line (printf ".INTERMEDIATE: %s" tgts)
 
-    line (printf "%s: %s" tgts deps)
+    let spc = if null deps then ":" else ": "
+    line (printf "%s%s%s" tgts spc deps)
     forM_ (rcmd r) $ \c -> do
       line (printf "\t%s" (toMakeText c))
 
