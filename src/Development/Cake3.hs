@@ -182,10 +182,14 @@ rule act = snd `liftM` withPlacement (rule' act)
 genFile' :: File -> String -> A () -> Make File
 genFile' tgt cnt act =
   rule $ do
-    shell [cmd|( \|]
-    forM_ (lines cnt) $ \l -> do
-      shell [cmd|echo $(string (quote l))  ;\|]
-    shell [cmd|) > @tgt|]
+    case null cnt of
+      True -> do
+        shell [cmd| echo -n > @tgt|]
+      False -> do
+        shell [cmd|( \|]
+        forM_ (lines cnt) $ \l -> do
+          shell [cmd|echo $(string (quote l))  ;\|]
+        shell [cmd|) > @tgt|]
     act
     return tgt
   where
