@@ -101,7 +101,7 @@ EOF
 
 ARGS_PASS=""
 GHCI=n
-GHC_EXTS="-XFlexibleInstances -XTypeSynonymInstances -XOverloadedStrings -XQuasiQuotes"
+GHC_EXTS="-XFlexibleInstances -XTypeSynonymInstances -XQuasiQuotes"
 CAKEDIR=""
 
 while test -n "$1" ; do
