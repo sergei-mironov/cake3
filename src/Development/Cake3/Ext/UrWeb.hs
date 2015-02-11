@@ -326,6 +326,9 @@ instance (Monad m) => LibraryDecl m [File] where
 instance (Monad m) => LibraryDecl m UWLib where
   library (UWLib u) = library (urp u)
 
+instance (Monad m) => LibraryDecl m UWExe where
+  library (UWExe u) = library (urp u)
+
 instance (Monad m) => LibraryDecl m (m File) where
   library ml = (liftUrpGen ml) >>= library
 
