@@ -216,7 +216,7 @@ genIn f ds wr = genFile' (tmp_file (tempPrefix f)) (execWriter $ wr) (forM_ ds d
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-urincl = makevar "UR_INCL" "-I$(shell urweb -print-cinclude) " 
+urincl = makevar "UR_INCL" "-I$(shell urweb -print-cinclude)" 
 gcc = makevar "UR_CC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
 gxx = makevar "UR_CPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
 urcflags = extvar "UR_CFLAGS"
