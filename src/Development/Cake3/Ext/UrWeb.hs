@@ -481,7 +481,7 @@ embed' ueo' js_ffi f = do
        else
          return [cmd||])
 
-  let p = tmp_file $ (tempPrefix f) ++ "_patch"
+  let p = intermed f "" "urp.in"
   addPatch p
   rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
   o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $c |])
@@ -517,6 +517,8 @@ instance EmbedDecl Mangled_File where
 
 instance EmbedDecl x => EmbedDecl (Make x) where
   embed ml = liftMake ml >>= embed
+
+-- TESTS
 
 -- t1 :: Make ((),UrpState)
 -- t1 = runUrpGen (file "Script.urp") $ do

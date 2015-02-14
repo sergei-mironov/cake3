@@ -10,6 +10,8 @@ import Development.Cake3
 import Development.Cake3.Types
 import Development.Cake3.Monad
 
+filterDirectoryContentsRecursive :: (MonadIO m) => [String] -> m [File]
+filterDirectoryContentsRecursive exts = liftM (filterExts exts) (getDirectoryContentsRecursive (file' toplevelModule "."))
 
 filterExts :: [String] -> [File] -> [File]
 filterExts exts files = filter (\f -> or $ map (isExt f) exts) files where

@@ -189,7 +189,8 @@ toplevelModule = ModuleLocation "." "."
 type File = FileT ModuleLocation FilePath
 
 -- | Converts string representation of Path into type-safe File. Internally,
--- files are stored as a relative offsets from the project root directory
+-- files are stored in a form of offset from module root directory, plus the
+-- path from top-level dir to module root and back (see @ModuleLocation@)
 file' :: ModuleLocation -> FilePath -> File
 file' pl f = FileT pl f
 

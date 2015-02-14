@@ -27,40 +27,45 @@ cat <<EOF
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 module ${1}_P(
+
+  -- functions
   file,
   cakefiles,
   selfUpdate,
+  writeDefaultMakefiles,
   filterDirectoryContentsRecursive,
+
+  -- tools
+  cake3,
   cakegen,
-  cake3
+  urembed,
+  caketools
   ) where
 
 import Control.Monad.Trans
 import Control.Monad.State
 import Development.Cake3
 import Development.Cake3.Monad
+import Development.Cake3.Ext.UrWeb
+import Development.Cake3.Utils.Slice
 import Development.Cake3.Utils.Find
--- import GHC.Exts (IsString(..))
-
-pl = ModuleLocation t2m m2t
-
-file :: String -> File
-file x = file' pl x
-
--- instance IsString File where
---   fromString = file
-
-projectroot :: FilePath
-projectroot = "$TOP"
-
-moduleroot :: FilePath
-moduleroot = "$2"
 
 t2m :: FilePath
 t2m = "`relPath "$TOP" "$2"`"
 
 m2t :: FilePath
 m2t = "`relPath "$2" "$TOP"`"
+
+pl = ModuleLocation t2m m2t
+
+file :: String -> File
+file x = file' pl x
+
+projectroot :: FilePath
+projectroot = "$TOP"
+
+moduleroot :: FilePath
+moduleroot = "$2"
 
 cakefiles :: [File]
 cakefiles = 
@@ -85,8 +90,9 @@ selfUpdate = do
     shell [cmd|\$(cakegen)|]
   return f
 
-filterDirectoryContentsRecursive :: (MonadIO m) => [String] -> m [File]
-filterDirectoryContentsRecursive exts = liftM (filterExts exts) (getDirectoryContentsRecursive (file "."))
+caketools = [urembed,cake3,cakegen]
+
+writeDefaultMakefiles m = writeSliced (file "Makefile.dev") [(file "Makefile", caketools)] (selfUpdate >> m)
 
 EOF
 }
