@@ -439,10 +439,17 @@ instance SrcDecl File where
 instance SrcDecl x => SrcDecl (Make x) where
   src  ml = liftMake ml >>= src
 
-
-
 ffi :: (MonadMake m) => File -> UrpGen m ()
-ffi = addHdr . UrpFFI
+ffi f = if (takeExtension f) == ".js" then
+          embed (JS_File f)
+        else
+          addHdr (UrpFFI f)
+
+css :: (MonadMake m) => File -> UrpGen m ()
+css f = if (takeExtension f) == ".css" then
+          embed (CSS_File f)
+        else
+          error (printf "css: File %s doesn't end with .css" (topRel f))
 
 sql :: (MonadMake m) => File -> UrpGen m ()
 sql = addHdr . UrpSql
