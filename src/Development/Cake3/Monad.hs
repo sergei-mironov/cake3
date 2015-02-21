@@ -5,6 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module Development.Cake3.Monad where
 
@@ -334,6 +335,9 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
   refOutput mx = case mx of
     Nothing -> return mempty
     Just x -> refOutput x
+
+instance (RefOutput m File) => RefOutput m (m File) where
+  refOutput mx = (A' $ lift mx) >>= refOutput
 
 -- | Class of things which may be referenced using '\$(expr)' syntax of the
 -- quasy-quoted shell expressions

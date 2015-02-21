@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module System.FilePath.Wrapper where
 
@@ -41,6 +42,19 @@ class FileLike a where
   dropExtensions :: a -> a
   dropExtension :: a -> a
   splitDirectories :: a -> [String]
+
+instance (Monad m, FileLike (FileT h a)) => FileLike (m (FileT h a)) where
+  combine mx s = mx >>= \x -> return $ combine x s
+  takeDirectory mx = mx >>= return . takeDirectory
+  takeBaseName mx = error "takeBaseName with monadic argument"
+  takeFileName mx = error "takeFileName with monadic argument"
+  makeRelative mx my = mx >>= \x -> my >>= \y -> return $ makeRelative x y
+  replaceExtension mx s = mx >>= \x -> return $ replaceExtension x s
+  takeExtension mx = error "takeExtension with monadic argument"
+  takeExtensions mx = error "takeExtensions with monadic argument"
+  dropExtensions mx = mx >>= return . dropExtensions
+  dropExtension mx = mx >>= return . dropExtension
+  splitDirectories mx = error "splitDirectories with monadic argument"
 
 -- | Redefine standard @</>@ operator to work with Files
 (</>) :: (FileLike a) => a -> String -> a

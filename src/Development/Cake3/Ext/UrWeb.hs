@@ -59,7 +59,7 @@ data SrcFile = SrcFile File String String
   deriving(Show,Data,Typeable)
 
 data Urp = Urp {
-    urp :: File
+    urp_ :: File
   , uexe :: Maybe File
   , uhdr :: [UrpHdrToken]
   , umod :: [UrpModToken]
@@ -74,21 +74,34 @@ newtype UWExe = UWExe Urp
   deriving (Show,Data,Typeable)
 
 instance (MonadAction a m) => RefInput a m UWLib where
-  refInput (UWLib u) = refInput (urp u)
+  refInput (UWLib u) = refInput (urp_ u)
  
 instance (MonadAction a m) => RefInput a m UWExe where
   refInput (UWExe u) = refInput (urpExe u)
  
-class UrpLike x where
-  toUrp :: x -> Urp
+-- class UrpLike x where
+--   toUrp :: x -> Urp
 
-instance UrpLike Urp where
-  toUrp = id
+-- instance UrpLike Urp where
+--   toUrp = id
 
-instance UrpLike UWLib where
-  toUrp (UWLib x) = x
-instance UrpLike UWExe where
-  toUrp (UWExe x) = x
+-- instance UrpLike UWLib where
+--   toUrp (UWLib x) = x
+-- instance UrpLike UWExe where
+--   toUrp (UWExe x) = x
+
+
+class (Monad m) => AppLike m x where
+  urp :: m x -> m File
+  sqlf :: m x -> m File
+  dbn :: m x -> m CakeString
+  
+
+instance (Monad m) => AppLike m UWExe where
+  urp mu = mu >>= \(UWExe u) -> return (urp_ u)
+  sqlf mu = mu >>= \(UWExe u) -> return (urpSql u)
+  dbn mu = sqlf mu >>= \x -> return (string $ takeBaseName x)
+
 
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod srcs _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
@@ -324,10 +337,10 @@ instance (Monad m) => LibraryDecl m [File] where
   library  ls = forM_ ls library
 
 instance (Monad m) => LibraryDecl m UWLib where
-  library (UWLib u) = library (urp u)
+  library (UWLib u) = library (urp_ u)
 
 instance (Monad m) => LibraryDecl m UWExe where
-  library (UWExe u) = library (urp u)
+  library (UWExe u) = library (urp_ u)
 
 instance (Monad m) => LibraryDecl m (m File) where
   library ml = (liftUrpGen ml) >>= library
@@ -483,7 +496,9 @@ embed' ueo' js_ffi f = do
 
   let p = intermed f "" "urp.in"
   addPatch p
-  rule' $ shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
+  rule' $ do
+    shell [cmd|mkdir -p $(string $ topRel a) 2>/dev/null|]
+    shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
   o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $c |])
   ffi s
   include h
