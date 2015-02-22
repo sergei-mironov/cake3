@@ -8,18 +8,18 @@ unexport MAIN
 
 # Main section
 
-.PHONY: all
-all: ./Makefile ./main.elf
+.PHONY: ./all
+./all: ./Makefile ./main.elf
 ./main.elf: ./Makefile ./main\ space.o
 	gcc -o ./main.elf ./main\ space.o
 ./main\ space.o: ./Makefile ./main\ space.c $(call GUARD,CFLAGS)
 	gcc -c $(CFLAGS) -o ./main\ space.o ./main\ space.c
 ./depend.mk: ./Makefile ./main\ space.c
 	gcc -M ./main\ space.c -MF ./depend.mk
-./Cakegen: ./Cakefile.hs
-	cake3
 ./Makefile: ./Cakegen
 	./Cakegen
+./Cakegen: ./Cakefile.hs
+	cake3
 $(call GUARD,CFLAGS):
 	rm -f .cake3/GUARD_CFLAGS_*
 	touch $@
@@ -31,30 +31,30 @@ else
 
 ifneq ($(MAKECMDGOALS),clean)
 
-.PHONY: all
-all: .fix-multy1
+.PHONY: ./all
+./all: ./.fix-multy1
 .PHONY: ./main.elf
-./main.elf: .fix-multy1
+./main.elf: ./.fix-multy1
 .PHONY: ./main\ space.o
-./main\ space.o: .fix-multy1
+./main\ space.o: ./.fix-multy1
 .PHONY: ./depend.mk
-./depend.mk: .fix-multy1
-.PHONY: ./Cakegen
-./Cakegen: .fix-multy1
+./depend.mk: ./.fix-multy1
 .PHONY: ./Makefile
-./Makefile: .fix-multy1
-.INTERMEDIATE: .fix-multy1
-.fix-multy1: 
+./Makefile: ./.fix-multy1
+.INTERMEDIATE: ./.fix-multy1
+./.fix-multy1:
 	-mkdir .cake3
 	@echo "*****************"
 	@echo "THE CAKE3 EXAMPLE"
 	@echo "*****************"
 	MAIN=1 $(MAKE) -f ./Makefile $(MAKECMDGOALS)
+.PHONY: ./Cakegen
+./Cakegen: ./.fix-multy1
 
 endif
-.PHONY: clean
-clean: 
-	-rm ./Cakegen ./depend.mk ./main\ space.o ./main.elf
+.PHONY: ./clean
+./clean:
+	-rm ./main\ space.o ./Cakegen ./depend.mk ./main.elf
 	-rm -rf .cake3
 
 endif

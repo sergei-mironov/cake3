@@ -195,9 +195,10 @@ newtype A' m a = A' { unA' :: StateT Recipe m a }
 -- | Verison of Action monad with fixed parents
 type A a = A' (Make' IO) a
 
--- | A class of monads providing access to the underlying A monad
-class (Monad m, Monad t) => MonadAction t m | t -> m where
-  liftAction :: A' m x -> t x
+-- | A class of monads providing access to the underlying A monad. We assume
+-- that (A' @m) is sitting somewhere inside @t
+class (Monad m, Monad a) => MonadAction a m | a -> m where
+  liftAction :: A' m x -> a x
 
 instance (Monad m) => MonadAction (A' m) m where
   liftAction = id
@@ -350,6 +351,9 @@ instance (MonadAction a m) => RefInput a m File where
     modify $ \r -> r { rsrc = f `S.insert` (rsrc r)}
     return_file f
 
+instance (RefInput a m x) => RefInput a m (m x) where
+  refInput mx = liftAction (A' $ lift mx) >>= refInput
+
 instance (MonadAction a m) => RefInput a m Recipe where
   refInput r = refInput (rtgt r)
 
@@ -365,8 +369,8 @@ instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
 instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
   refInput mr = liftMake mr >>= refInput
 
-instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
-  refInput mx = liftMake mx >>= refInput
+-- instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
+--   refInput mx = liftMake mx >>= refInput
 
 instance (RefInput a m x) => RefInput a m (Maybe x) where
   refInput mx = case mx of

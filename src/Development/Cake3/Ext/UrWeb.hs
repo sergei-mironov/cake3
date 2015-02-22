@@ -12,6 +12,7 @@ module Development.Cake3.Ext.UrWeb where
 import Data.Data
 import Data.Char
 import Data.Maybe
+import Data.List (tails, isPrefixOf)
 import Data.Foldable (Foldable(..), foldl')
 import qualified Data.Foldable as F
 import Control.Monad.Trans
@@ -78,29 +79,6 @@ instance (MonadAction a m) => RefInput a m UWLib where
  
 instance (MonadAction a m) => RefInput a m UWExe where
   refInput (UWExe u) = refInput (urpExe u)
- 
--- class UrpLike x where
---   toUrp :: x -> Urp
-
--- instance UrpLike Urp where
---   toUrp = id
-
--- instance UrpLike UWLib where
---   toUrp (UWLib x) = x
--- instance UrpLike UWExe where
---   toUrp (UWExe x) = x
-
-
-class (Monad m) => AppLike m x where
-  urp :: m x -> m File
-  sqlf :: m x -> m File
-  dbn :: m x -> m CakeString
-  
-
-instance (Monad m) => AppLike m UWExe where
-  urp mu = mu >>= \(UWExe u) -> return (urp_ u)
-  sqlf mu = mu >>= \(UWExe u) -> return (urpSql u)
-  dbn mu = sqlf mu >>= \x -> return (string $ takeBaseName x)
 
 
 urpDeps :: Urp -> [File]
@@ -125,10 +103,6 @@ urpSql u = case urpSql' u of
   Nothing -> error "ur project defines no SQL file"
   Just sql -> sql
 
-urpLibs (Urp _ _ hdr _ _ _) = foldl' scan [] hdr where
-  scan a (UrpLibrary f) = f:a
-  scan a _ = a
-
 urpExe' = uexe
 urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
@@ -137,6 +111,20 @@ urpExe u = case uexe u of
 urpPkgCfg (Urp _ _ hdr _ _ _) = foldl' scan [] hdr where
   scan a (UrpPkgConfig s) = s:a
   scan a _ = a
+
+urpDatabase' :: Urp -> Maybe String
+urpDatabase' (Urp _ _ hdr _ _ _) = foldl' scan Nothing hdr where
+  scan a (UrpDatabase s) = Just s
+  scan a _ = a
+
+urpDatabase :: Urp -> String
+urpDatabase u = fromMaybe (error "urp: No database defined") (urpDatabase' u)
+
+urpDbname a = find $ urpDatabase a where
+  key = "dbname="
+  find x = F.foldl scan (error $ "no "++key++" token found") (tails x)
+  scan b a | isPrefixOf key a = takeWhile isAlphaNum (drop (length key) a)
+           | otherwise = b
 
 data UrpState = UrpState {
     urpst :: Urp
@@ -214,10 +202,10 @@ runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,UrpState)
 runUrpGen f m = runStateT (unUrpGen m) (defState f)
 
 tempPrefix :: File -> String
-tempPrefix f = munglePath $ topRel f where
+tempPrefix f = manglePath $ topRel f where
 
-munglePath :: FilePath -> String
-munglePath = map plain where
+manglePath :: FilePath -> String
+manglePath = map plain where
   plain a | (not $ isAlphaNum a) = '_'
           | otherwise = a
 
@@ -229,10 +217,11 @@ genIn f ds wr = genFile' (tmp_file (tempPrefix f)) (execWriter $ wr) (forM_ ds d
 line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
-urincl = makevar "UR_INCL" "-I$(shell urweb -print-cinclude)" 
-gcc = makevar "UR_CC" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=gcc)"
-gxx = makevar "UR_CPP" "$(shell $(shell urweb -print-ccompiler) -print-prog-name=g++)"
-urcflags = extvar "UR_CFLAGS"
+urweb = makevar "URWEB" "urweb"
+uwinclude = makevar "UWINCLUDE" "-I$(shell $(URWEB) -print-cinclude)"
+gcc = makevar "UWCC" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=gcc)"
+gxx = makevar "UWCPP" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=g++)"
+uwcflags = extvar "UWCFLAGS"
 
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
@@ -244,9 +233,9 @@ uwlib urpfile m = do
     let cflags = string $ concat $ cfl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
     o <- (case takeExtension src of
       ".cpp" -> do
-        rule' $ shell1 [cmd| $gxx -c $urcflags $urincl $cflags -o @(src .= "o") $src |]
+        rule' $ shell1 [cmd| $gxx -c $uwcflags $uwinclude $cflags -o @(src .= "o") $src |]
       ".c" -> do
-        rule' $ shell1 [cmd| $gcc -c $urincl $urcflags $cflags -o @(src .= "o") $src |]
+        rule' $ shell1 [cmd| $gcc -c $uwinclude $uwcflags $cflags -o @(src .= "o") $src |]
       e -> fail ("Source type not supported (by extension) " ++ (topRel src)))
     return $ UrpLink (snd o) lfl
 
@@ -272,9 +261,11 @@ uwlib urpfile m = do
 
   return $ UWLib u
 
+uwflags = makevar "UWFLAGS" ""
+
 uwapp :: String -> File -> UrpGen (Make' IO) () -> Make UWExe
-uwapp uwflags urpfile m = do
-  (UWLib u') <- uwlib urpfile m
+uwapp flags urpfile m = do
+  (UWLib u') <- uwlib (urpfile .= "urp" ) m
   let u = u' { uexe = Just (urpfile .= "exe") }
   rule' $ do
     depend urpfile
@@ -282,9 +273,26 @@ uwapp uwflags urpfile m = do
     case urpSql' u of
       Nothing -> return ()
       Just sql -> produce sql
-    depend (makevar "URVERSION" "$(shell urweb -version)")
-    unsafeShell [cmd|urweb $(string uwflags) $((takeDirectory urpfile)</>(takeBaseName urpfile))|]
+    depend (makevar "UWVER" "$(shell $(URWEB) -version)")
+    let urparg = topRel $ (takeDirectory urpfile)</>(takeBaseName urpfile)
+    shell [cmd|$(urweb) $(string flags) $uwflags $(string urparg) |]
   return $ UWExe u
+
+uwapp_postgres :: File -> UrpGen (Make' IO) () -> (Make UWExe, Make File)
+uwapp_postgres f m = (app,db) where
+  dbn = (takeBaseName f)
+  fsql = (f .= "sql")
+  fdb = (f .= "db")
+  app = uwapp "-dbms postgres" f $ do
+    sql fsql
+    database ("dbname="++dbn)
+    m
+  db = rule $ do
+    shell [cmd|dropdb --if-exists $(string dbn)|]
+    shell [cmd|createdb $(string dbn)|]
+    shell [cmd|psql -f $(fsql) $(string dbn)|]
+    shell [cmd|touch @(fdb)|]
+    return fdb
 
 addHdr :: (Monad m) => UrpHdrToken -> UrpGen m ()
 addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
@@ -303,26 +311,6 @@ allow a s = addHdr $ UrpAllow a s
 
 rewrite :: (Monad m) => UrpRewrite -> String -> UrpGen m ()
 rewrite a s = addHdr $ UrpRewrite a s
-
--- addDot f = addDot' $ F.normalise f where
---   addDot' "." = "."
---   addDot' p = "."</>p
-
--- routeM :: (MonadMake m) => File -> UrpGen m File
--- routeM his = do
---   my <- urp `liftM` urpst `liftM` get
---   return $ route my his
-
--- Down from module to file
--- urpDown :: File -> FilePath
--- urpDown (FileT hint path) = F.makeRelative hint path
-
--- wayback x = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory x
-
--- -- Up to the Cake module's top dir
--- urpUp :: File -> FilePath
--- urpUp f = wayback $ mkrel f where
---   mkrel (FileT hint path) = F.makeRelative hint path
 
 class LibraryDecl m x where
   library :: x -> UrpGen m ()
@@ -441,7 +429,7 @@ instance SrcDecl x => SrcDecl (Make x) where
 
 ffi :: (MonadMake m) => File -> UrpGen m ()
 ffi f = if (takeExtension f) == ".js" then
-          embed (JS_File f)
+          embed (mangled f)
         else
           addHdr (UrpFFI f)
 
@@ -489,7 +477,7 @@ embed' :: (MonadMake m) => [String] -> Bool -> File -> UrpGen m ()
 embed' ueo' js_ffi f = do
   let ueo = unwords $ map ("--" ++) ueo'
   a <- autogenDir f
-  let intermed f suffix ext = (a </> ((munglePath (takeFileName f)) ++ suffix)) .= ext
+  let intermed f suffix ext = (a </> ((manglePath (takeFileName f)) ++ suffix)) .= ext
   let c = intermed f "_c" "c"
   let h = intermed f "_c" "h"
   let s = intermed f "_c" "urs"
@@ -506,18 +494,11 @@ embed' ueo' js_ffi f = do
   rule' $ do
     shell [cmd|mkdir -p $(string $ topRel a) 2>/dev/null|]
     shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
-  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $urincl -o @(c .= "o") $c |])
+  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $uwinclude -o @(c .= "o") $c |])
   ffi s
   include h
   link o
   ur w
-
-  -- u <- urp `liftM` urpst `liftM` get
-  -- liftMake $ liftIO $ do
-  --   putStrLn $ show a
-  --   putStrLn $ show u
-  --   putStrLn $ show w
-  --   putStrLn $ route u w
 
 class EmbedDecl x where
   embed :: (MonadMake m) => x -> UrpGen m ()
