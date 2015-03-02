@@ -15,6 +15,7 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
+import qualified System.FilePath as F
 
 import System.FilePath.Wrapper
 
@@ -175,4 +176,45 @@ extvar n = var n Nothing
 
 -- | Reref to special variable @$(MAKE)@
 make = extvar "MAKE"
+
+data ModuleLocation = ModuleLocation {
+    top2mod :: FilePath -- ^ Relative path from top-level dir to the module
+  , mod2top :: FilePath -- ^ Relative path from module to the top-level dir
+  } deriving (Data, Typeable, Show, Eq, Ord)
+
+toplevelModule = ModuleLocation "." "."
+
+-- | Simple wrapper for FilePath. The first type argument is a Hint, containing
+-- the path to the current module
+type File = FileT ModuleLocation FilePath
+
+-- | Converts string representation of Path into type-safe File. Internally,
+-- files are stored in a form of offset from module root directory, plus the
+-- path from top-level dir to module root and back (see @ModuleLocation@)
+file' :: ModuleLocation -> FilePath -> File
+file' pl f = FileT pl f
+
+dottify :: FilePath -> FilePath
+dottify = addDot . F.normalise where
+  addDot "." = "."
+  addDot p@('.':'.':_) = p
+  addDot p = "."</>p
+
+topRel :: File -> FilePath
+topRel (FileT (ModuleLocation t2m m2t) path) = dottify $ t2m </> path
+
+wayback :: FilePath -> FilePath
+wayback x = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory x
+
+route :: File -> File -> FilePath
+route s@(FileT myloc mypath) t@(FileT hisloc hispath)
+  | myloc == hisloc = dottify $ (wayback mypath) </> hispath
+  | otherwise = dottify $ (wayback mypath) </> (mod2top myloc) </> (top2mod hisloc) </> hispath
+
+-- | Convert File back to FilePath with escaped spaces
+escapeFile :: File -> FilePath
+escapeFile f = escapeFile' (topRel f) where
+  escapeFile' [] = []
+  escapeFile' (' ':xs) = "\\ " ++ escapeFile' xs
+  escapeFile' (x:xs) = (x:(escapeFile' xs))
 

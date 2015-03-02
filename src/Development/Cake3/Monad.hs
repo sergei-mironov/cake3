@@ -5,6 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module Development.Cake3.Monad where
 
@@ -94,7 +95,7 @@ addMakeDep :: File -> Make ()
 addMakeDep f = modify (\ms -> ms { makeDeps = S.insert f (makeDeps ms) })
 
 tmp_file :: String -> File
-tmp_file pfx = (fromFilePath (".cake3" </> ("tmp_"++ pfx )))
+tmp_file pfx = (fromFilePath toplevelModule (".cake3" </> ("tmp_"++ pfx )))
 
 prebuild, postbuild, prebuildS, postbuildS :: (MonadMake m) => CommandGen -> m ()
 
@@ -127,10 +128,10 @@ checkForEmptyTarget rs = foldl' checker mempty rs where
 
 -- | Find recipes sharing a target. Empty result means 'No errors'
 checkForTargetConflicts :: (Foldable f) => f Recipe -> String
-checkForTargetConflicts rs = foldl' checker mempty (groupRecipes rs) where
-  checker es rs | S.size rs > 1 = es++e
-                | otherwise = es where
-    e = printf "Error: Recipes share one or more targets:\n\t%s\n" (show rs)
+checkForTargetConflicts rs = M.foldlWithKey' checker mempty (groupRecipes rs) where
+  checker es k v | S.size v > 1 = es++e
+                 | otherwise = es where
+    e = printf "Error: Target %s is shared by the following recipes:\n\t%s\n" (show k) (show v)
 
 
 -- | A Monad providing access to MakeState. TODO: not mention IO here.
@@ -194,27 +195,28 @@ newtype A' m a = A' { unA' :: StateT Recipe m a }
 -- | Verison of Action monad with fixed parents
 type A a = A' (Make' IO) a
 
--- | A class of monads providing access to the underlying A monad
-class (Monad m, Monad t) => MonadAction t m | t -> m where
-  liftAction :: A' m x -> t x
+-- | A class of monads providing access to the underlying A monad. We assume
+-- that (A' @m) is sitting somewhere inside @t
+class (Monad m, Monad a) => MonadAction a m | a -> m where
+  liftAction :: A' m x -> a x
 
 instance (Monad m) => MonadAction (A' m) m where
   liftAction = id
 
--- | Run the Action monad, using already existing Recipe as input.
+-- | Fill recipe @r using the action @act by running the action monad
 runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
 runA' r act = do
   (a,r) <- runStateT (unA' act) r
   return (r,a)
 
--- | Create new empty recipe and run action on it.
+-- | Create an empty recipe, fill it using action @act
 runA :: (Monad m)
   => String -- ^ Location string (in the Cakefile.hs)
   -> A' m a -- ^ Recipe builder
   -> m (Recipe, a)
 runA loc act = runA' (emptyRecipe loc) act
 
--- | Version of runA discarding the result of A's computation
+-- | Version of runA discarding the result of computation
 runA_ :: (Monad m) => String -> A' m a -> m Recipe
 runA_ loc act = runA loc act >>= return .fst
 
@@ -241,7 +243,7 @@ phony :: (Monad m)
   => String -- ^ A name of phony target
   -> A' m ()
 phony name = do
-  produce (fromFilePath name :: File)
+  produce (fromFilePath toplevelModule name :: File)
   markPhony
 
 -- | Mark the recipe as 'INTERMEDIATE' i.e. claim that all it's targets may be
@@ -254,7 +256,7 @@ markIntermediate = modify $ \r -> r { rflags = S.insert Intermediate (rflags r) 
 readFileForMake :: (MonadMake m)
   => File -- ^ File to read contents of
   -> m BS.ByteString
-readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (toFilePath f)))
+readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (topRel f)))
 
 -- | CommandGen is a recipe-builder packed in the newtype to prevent partial
 -- expantion of it's commands
@@ -283,6 +285,13 @@ shell cmdg = do
   commands [line]
   r <- get
   return (S.toList (rtgt r))
+
+-- | Version of @shell returning a single file
+shell1 :: (Monad m) => CommandGen' m -> A' m File
+shell1 = shell >=> (\x -> case x of
+  [] -> fail "shell1: Error, no targets defined"
+  (f:[]) -> return f
+  (f:fs) -> fail "shell1: Error, multiple targets defined")
 
 -- | Version of @shell@ which doesn't track it's dependencies
 unsafeShell :: (Monad m) => CommandGen' m -> A' m [File]
@@ -328,6 +337,9 @@ instance (RefOutput m x) => RefOutput m (Maybe x) where
     Nothing -> return mempty
     Just x -> refOutput x
 
+instance (RefOutput m File) => RefOutput m (m File) where
+  refOutput mx = (A' $ lift mx) >>= refOutput
+
 -- | Class of things which may be referenced using '\$(expr)' syntax of the
 -- quasy-quoted shell expressions
 class (MonadAction a m) => RefInput a m x where
@@ -338,6 +350,9 @@ instance (MonadAction a m) => RefInput a m File where
   refInput f = liftAction $ do
     modify $ \r -> r { rsrc = f `S.insert` (rsrc r)}
     return_file f
+
+instance (RefInput a m x) => RefInput a m (m x) where
+  refInput mx = liftAction (A' $ lift mx) >>= refInput
 
 instance (MonadAction a m) => RefInput a m Recipe where
   refInput r = refInput (rtgt r)
@@ -354,8 +369,8 @@ instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
 instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
   refInput mr = liftMake mr >>= refInput
 
-instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
-  refInput mx = liftMake mx >>= refInput
+-- instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
+--   refInput mx = liftMake mx >>= refInput
 
 instance (RefInput a m x) => RefInput a m (Maybe x) where
   refInput mx = case mx of
@@ -459,5 +474,6 @@ cmd = QuasiQuoter
                                   Right e -> case c of
                                     '$' -> appE [| refInput |] (return e)
                                     '@' -> appE [| refOutput |] (return e)
+                                    _ -> error $ "cmd: unknown quotation modifier " ++ [c]
       in appE [| \l -> L.concat <$> (sequence l) |] (listE chunks)
 

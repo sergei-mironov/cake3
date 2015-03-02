@@ -93,7 +93,7 @@ getChunks i = case parseOnly parser (T.strip i) of
 
                       | otherwise -> do
                         -- value
-                        name <- takeTill (\c -> not (isAlphaNum c || c == '_') )
+                        name <- takeTill (\c -> not (isAlphaNum c || c == '_' || c == '\'') )
                         return [T text, E delim (T.cons next name)]
                         
 

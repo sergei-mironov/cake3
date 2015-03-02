@@ -25,9 +25,8 @@ module Development.Cake3 (
   , MonadMake(..)
 
   -- Rules
-  , rule
-  , rule2
   , rule'
+  , rule
   , phony
   , depend
   , produce
@@ -41,8 +40,9 @@ module Development.Cake3 (
   , file'
   , (.=)
   , (</>)
-  , toFilePath
+  , topRel
   , readFileForMake
+  , genFile'
   , genFile
 
   -- Make parts
@@ -55,7 +55,7 @@ module Development.Cake3 (
   , tool
   , CommandGen'(..)
   , make
-  , ProjectLocation(..)
+  , ModuleLocation(..)
   , currentDirLocation
 
   -- Import several essential modules
@@ -90,24 +90,8 @@ import Development.Cake3.Writer
 import Development.Cake3.Monad
 import System.FilePath.Wrapper as W
 
-data ProjectLocation = ProjectLocation {
-    root :: FilePath
-  , off :: FilePath
-  } deriving (Show, Eq, Ord)
-
-currentDirLocation :: (MonadIO m) => m ProjectLocation
-currentDirLocation = do
-  cwd <- liftIO $ getCurrentDirectory
-  return $ ProjectLocation cwd cwd
-
--- | Converts string representation of Path into type-safe File. Internally,
--- files are stored as a relative offsets from the project root directory
-file' :: ProjectLocation -> String -> File
-file' pl f' = fromFilePath (addpoint (F.normalise rel)) where
-  rel = makeRelative (root pl) ((off pl) </> f)
-  f = F.dropTrailingPathSeparator f'
-  addpoint "." = "."
-  addpoint p = "."</>p
+currentDirLocation :: (MonadIO m) => m ModuleLocation
+currentDirLocation = return toplevelModule
 
 -- | A Generic Make monad runner. Execute the monad @mk@, provide the @output@
 -- handler with Makefile encoded as a string. Note that Makefile may contain
@@ -151,7 +135,7 @@ writeMake
   -> IO ()
 writeMake f mk = do
   ms <- evalMake defaultMakefile mk
-  runMakeH_ ms (writeFile (toFilePath f))
+  runMakeH_ ms (writeFile (topRel f))
 
 -- | Raise the recipe's priority (it will appear higher in the final Makefile)
 withPlacement :: (MonadMake m) => m (Recipe,a) -> m (Recipe,a)
@@ -173,40 +157,51 @@ withPlacement mk = do
 -- > let c = file "main.c"
 -- > rule $ shell [cmd| gcc -c $(extvar "CFLAGS") -o @(c.="o") $c |]
 --
-rule2 :: (MonadMake m)
+rule' :: (MonadMake m)
   => A a -- ^ Recipe builder
   -> m (Recipe,a) -- ^ The recipe itself and the recipe builder's result
-rule2 act = liftMake $ do
+rule' act = liftMake $ do
   loc <- getLoc
   (r,a) <- runA loc act
   addRecipe r
   return (r,a)
 
--- | A version of rule2. Rule places it's recipe above all recipies defined so
--- far.
+-- | Create the rule, place it's recipe above all recipies defined so far. See
+-- rule' for other details
 rule
   :: A a    -- ^ Recipe builder
   -> Make a
-rule act = snd <$> withPlacement (rule2 act)
+rule act = snd `liftM` withPlacement (rule' act)
 
 -- | A version of rule, without monad set explicitly
-rule' :: (MonadMake m) => A a -> m a
-rule' act = liftMake $ snd <$> withPlacement (rule2 act)
+-- rule' :: (MonadMake m) => A a -> m a
+-- rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
-
-genFile :: File -> String -> Make File
-genFile tgt cnt = rule' $do
-  shell [cmd|( \|]
-  forM_ (lines cnt) $ \l -> do
-    shell [cmd|echo $(string (quote l))  ;\|]
-  shell [cmd|) > @tgt|]
-  return tgt
+-- | Build a rule for creating file @tgt with a fixed content @cnt, use
+-- additional actions @a for the recipe
+genFile' :: File -> String -> A () -> Make File
+genFile' tgt cnt act =
+  rule $ do
+    case null cnt of
+      True -> do
+        shell [cmd| echo -n > @tgt|]
+      False -> do
+        shell [cmd|( \|]
+        forM_ (lines cnt) $ \l -> do
+          shell [cmd|echo $(string (quote l))  ;\|]
+        shell [cmd|) > @tgt|]
+    act
+    return tgt
   where
     quote [] = []
     quote ('$':cs) = '$':'$':(quote cs)
     quote (x:cs)
       | not (isAlphaNum x) = '\\':x:(quote cs)
       | otherwise = x : (quote cs)
+
+-- | See @genFile'
+genFile :: File -> String -> Make File
+genFile f c = genFile' f c (return ())
 
 -- FIXME: buggy function, breaks commutativity
 -- genTmpFile :: (MonadMake m) => String -> m File
@@ -215,4 +210,29 @@ genFile tgt cnt = rule' $do
 -- FIXME: buggy function, breaks commutativity
 -- genTmpFileWithPrefix :: (MonadMake m) => String -> String -> m File
 -- genTmpFileWithPrefix pfx cnt = tmpFile pfx >>= \f -> genFile f cnt
+
+
+
+--
+-- TESTS
+--
+
+-- t1 :: Make ()
+-- t1 = do
+--   rule $ do
+--     a <- rule' $ shell1 [cmd|echo a > @(file "a")|]
+--     shell [cmd|cp $(snd a) @(file "b")|]
+--   return ()
+--   where
+--     file = file' (ProjectLocation "." ".") 
+
+
+
+
+
+
+
+
+
+
 
