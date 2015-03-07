@@ -48,6 +48,7 @@ data UrpHdrToken = UrpDatabase String
                  | UrpSafeGet String
                  | UrpScript String
                  | UrpClientOnly String
+                 | UrpFile String File
   deriving(Show,Data,Typeable)
 
 data UrpModToken
@@ -179,6 +180,7 @@ instance ToUrpLine UrpHdrToken where
   toUrpLine t (UrpJSFunc s1 s2 s3) = printf "jsFunc %s.%s = %s" s1 s2 s3
   toUrpLine t (UrpScript s) = printf "script %s" s
   toUrpLine t (UrpClientOnly s) = printf "clientOnly %s" s
+  toUrpLine t (UrpFile s f) = printf "file %s %s" s (route t f)
 
 instance ToUrpLine UrpModToken where
   toUrpLine t (UrpModule1 f) = route t (dropExtensions f)
@@ -520,6 +522,12 @@ instance EmbedDecl Mangled_File where
 
 instance EmbedDecl x => EmbedDecl (Make x) where
   embed ml = liftMake ml >>= embed
+
+static :: (MonadMake m) => String -> File -> UrpGen m ()
+static s f = addHdr (UrpFile s f)
+
+file_ :: (MonadMake m) => String -> File -> UrpGen m ()
+file_ = static
 
 -- TESTS
 
