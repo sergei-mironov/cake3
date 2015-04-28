@@ -34,8 +34,7 @@ data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
 data UrpRewrite = UrpStyle | UrpAll | UrpTable
   deriving(Show,Data,Typeable)
 
-data UrpHdrToken = UrpDatabase String
-                 | UrpSql File
+data UrpHdrToken = UrpSql File
                  | UrpAllow UrpAllow String
                  | UrpRewrite UrpRewrite String
                  | UrpLibrary File
@@ -60,6 +59,9 @@ data UrpModToken
 data SrcFile = SrcFile File String String
   deriving(Show,Data,Typeable)
 
+data DBString = DBString String
+  deriving(Show,Data,Typeable)
+
 data Urp = Urp {
     urp_ :: File
   , uexe :: Maybe File
@@ -67,6 +69,7 @@ data Urp = Urp {
   , umod :: [UrpModToken]
   , srcs :: [SrcFile]
   , patches :: [File]
+  , dbstr :: Maybe DBString
   } deriving(Show,Data,Typeable)
 
 newtype UWLib = UWLib Urp
@@ -83,7 +86,7 @@ instance (MonadAction a m) => RefInput a m UWExe where
 
 
 urpDeps :: Urp -> [File]
-urpDeps (Urp _ _ hdr mod srcs _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
+urpDeps (Urp _ _ hdr mod srcs _ _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
   scan1 a (UrpLink f _) = f:a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
@@ -94,7 +97,7 @@ urpDeps (Urp _ _ hdr mod srcs _) = foldl' scan2 (foldl' scan1 (foldl' scan3 memp
   scan3 a (SrcFile f _ _) = (f.="o"):a
 
 urpSql' :: Urp -> Maybe File
-urpSql' (Urp _ _ hdr _ _ _) = find hdr where
+urpSql' (Urp _ _ hdr _ _ _ _) = find hdr where
   find [] = Nothing
   find ((UrpSql f):hs) = Just f
   find (h:hs) = find hs
@@ -109,14 +112,12 @@ urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
 
-urpPkgCfg (Urp _ _ hdr _ _ _) = foldl' scan [] hdr where
+urpPkgCfg (Urp _ _ hdr _ _ _ _) = foldl' scan [] hdr where
   scan a (UrpPkgConfig s) = s:a
   scan a _ = a
 
 urpDatabase' :: Urp -> Maybe String
-urpDatabase' (Urp _ _ hdr _ _ _) = foldl' scan Nothing hdr where
-  scan a (UrpDatabase s) = Just s
-  scan a _ = a
+urpDatabase' u = dbstr u >>= \(DBString s) -> return s
 
 urpDatabase :: Urp -> String
 urpDatabase u = fromMaybe (error "urp: No database defined") (urpDatabase' u)
@@ -132,7 +133,7 @@ data UrpState = UrpState {
   , urautogen :: String
   } deriving (Show)
 
-defUrp f = Urp f Nothing [] [] [] []
+defUrp f = Urp f Nothing [] [] [] [] Nothing
 
 defState f = UrpState (defUrp f) "autogen"
 
@@ -162,8 +163,10 @@ class ToUrpLine a where
 
 maskPkgCfg s = "%" ++ (map toUpper s) ++ "%"
 
+instance ToUrpLine DBString where
+  toUrpLine t (DBString dbs) = printf "database %s" dbs
+
 instance ToUrpLine UrpHdrToken where
-  toUrpLine t (UrpDatabase dbs) = printf "database %s" dbs
   toUrpLine t (UrpSql f) = printf "sql %s" (route t f)
   toUrpLine t (UrpAllow a s) = printf "allow %s %s" (toUrpWord a) s
   toUrpLine t (UrpRewrite a s) = printf "rewrite %s %s" (toUrpWord a) s
@@ -228,7 +231,7 @@ uwcflags = extvar "UWCFLAGS"
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
   ((),s) <- runUrpGen urpfile m
-  let u@(Urp tgt _ hdr mod srcs ptch) = urpst s
+  let u@(Urp tgt _ hdr mod srcs ptch dbs) = urpst s
   let pkgcfg = (urpPkgCfg u)
 
   os <- forM srcs $ \(SrcFile src cfl lfl) -> do
@@ -242,6 +245,7 @@ uwlib urpfile m = do
     return $ UrpLink (snd o) lfl
 
   urp1 <- genIn (urpfile .= "in.1") (urpDeps u) $ do
+    maybe (return ()) (line . toUrpLine tgt) dbs
     forM hdr (line . toUrpLine tgt)
     forM os (line . toUrpLine tgt)
 
@@ -306,7 +310,7 @@ addPatch :: (Monad m) => File -> UrpGen m ()
 addPatch f = modify $ \s -> let u = urpst s in s { urpst = u { patches = f : (patches u) } }
 
 database :: (Monad m) => String -> UrpGen m ()
-database dbs = addHdr $ UrpDatabase dbs
+database dbs = modify $ \s -> let u = urpst s in s { urpst = u { dbstr = Just (DBString dbs) } }
 
 allow :: (Monad m) => UrpAllow -> String -> UrpGen m ()
 allow a s = addHdr $ UrpAllow a s
