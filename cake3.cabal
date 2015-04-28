@@ -74,7 +74,7 @@ library
                      Text.QuasiMake
 
   build-depends:     base ==4.7.*, haskell-src-meta, template-haskell,
-                     filepath, containers, text, monadloc, mtl,
+                     filepath, containers, text, monadloc, mtl >= 2.2.1,
                      bytestring, deepseq, system-filepath, text-format,
                      directory, attoparsec, mime-types,
                      language-javascript, syb, parsec, process
@@ -91,7 +91,7 @@ executable cake3
 executable urembed
   hs-source-dirs:    src
   main-is:           Development/Cake3/Ext/UrEmbed/Main.hs
-  build-depends:     base == 4.7.*, mtl, language-javascript, process,
+  build-depends:     base == 4.7.*, mtl >= 2.2.1 , language-javascript, process,
                      filepath, syb, optparse-applicative, directory,
                      text, bytestring, containers, language-javascript,
                      haskell-src-meta, template-haskell, attoparsec, monadloc,
