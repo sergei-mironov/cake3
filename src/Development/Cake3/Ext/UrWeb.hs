@@ -210,9 +210,12 @@ tempPrefix :: File -> String
 tempPrefix f = manglePath $ topRel f where
 
 manglePath :: FilePath -> String
-manglePath = map plain where
+manglePath = chkfst . map plain where
   plain a | (not $ isAlphaNum a) = '_'
           | otherwise = a
+  chkfst f@(a:as) | isDigit a = "N" ++ f
+                  | otherwise = f
+  chkfst [] = error "manglePath: empty path"
 
 -- | Produce fixed-content rule using @f as a uniq name template, add additional
 -- dependencies @ds
