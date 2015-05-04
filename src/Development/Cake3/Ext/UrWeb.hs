@@ -30,8 +30,8 @@ import Development.Cake3.Ext.UrEmbed.Types (css_mangle_flag)
 import qualified Development.Cake3.Ext.UrEmbed.Types as UE
 
 -- | Converts FILE.urs to the Ur/Web module name
-embededModuleName :: File -> String
-embededModuleName = UE.uwModName . (++".ur") . manglePath . takeFileName
+embeddedModuleName :: File -> String
+embeddedModuleName = UE.uwModName . (++".ur") . manglePath . takeFileName
 
 data UrpAllow = UrpMime | UrpUrl | UrpResponseHeader | UrpEnvVar | UrpHeader
   deriving(Show,Data,Typeable)
