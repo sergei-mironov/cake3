@@ -75,6 +75,9 @@ data Urp = Urp {
   , srcs :: [SrcFile]
   , patches :: [File]
   , dbstr :: Maybe DBString
+  , prereq :: [File]
+  -- ^ Additional prerequisites
+  , urautogen :: String
   } deriving(Show,Data,Typeable)
 
 newtype UWLib = UWLib Urp
@@ -83,15 +86,15 @@ newtype UWLib = UWLib Urp
 newtype UWExe = UWExe Urp
   deriving (Show,Data,Typeable)
 
-instance (MonadAction a m) => RefInput a m UWLib where
+instance (Monad m) => RefInput (A' m) UWLib where
   refInput (UWLib u) = refInput (urp_ u)
  
-instance (MonadAction a m) => RefInput a m UWExe where
+instance (Monad m) => RefInput (A' m) UWExe where
   refInput (UWExe u) = refInput (urpExe u)
 
 
 urpDeps :: Urp -> [File]
-urpDeps (Urp _ _ hdr mod srcs _ _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
+urpDeps (Urp _ _ hdr mod srcs _ _ _ _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
   scan1 a (UrpLink f _) = f:a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
@@ -102,7 +105,7 @@ urpDeps (Urp _ _ hdr mod srcs _ _) = foldl' scan2 (foldl' scan1 (foldl' scan3 me
   scan3 a (SrcFile f _ _) = (f.="o"):a
 
 urpSql' :: Urp -> Maybe File
-urpSql' (Urp _ _ hdr _ _ _ _) = find hdr where
+urpSql' u = find (uhdr u) where
   find [] = Nothing
   find ((UrpSql f):hs) = Just f
   find (h:hs) = find hs
@@ -117,7 +120,7 @@ urpExe u = case uexe u of
   Nothing -> error "ur project defines no EXE file"
   Just exe -> exe
 
-urpPkgCfg (Urp _ _ hdr _ _ _ _) = foldl' scan [] hdr where
+urpPkgCfg u = foldl' scan [] (uhdr u) where
   scan a (UrpPkgConfig s) = s:a
   scan a _ = a
 
@@ -133,14 +136,7 @@ urpDbname a = find $ urpDatabase a where
   scan b a | isPrefixOf key a = takeWhile isAlphaNum (drop (length key) a)
            | otherwise = b
 
-data UrpState = UrpState {
-    urpst :: Urp
-  , urautogen :: String
-  } deriving (Show)
-
-defUrp f = Urp f Nothing [] [] [] [] Nothing
-
-defState f = UrpState (defUrp f) "autogen"
+defUrp f = Urp f Nothing [] [] [] [] Nothing [] "autogen"
 
 -- | Returns autogen dir for the current module's file
 autogenDir :: (Monad m) => File -> UrpGen m File
@@ -197,8 +193,13 @@ instance ToUrpLine UrpModToken where
     | otherwise = error $ printf "ur: File names should match, got %s, %s" (route t f) (route t f2)
   toUrpLine t (UrpModuleSys s) = printf "$/%s" s
 
-newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
-  deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
+newtype UrpGen m a = UrpGen { unUrpGen :: StateT Urp m a }
+  deriving(Functor, Applicative, Monad, MonadState Urp, MonadMake, MonadIO)
+
+instance (Monad m) => RefInput (UrpGen m) File where
+  refInput f = do
+    modify (\ug -> ug {prereq = f : (prereq ug)})
+    return mempty
 
 class (Monad m, Monad m1) => MonadUrpGen m1 m where
   liftUrpGen :: m1 a -> m a
@@ -206,8 +207,8 @@ class (Monad m, Monad m1) => MonadUrpGen m1 m where
 instance (Monad m) => MonadUrpGen m (UrpGen m) where
   liftUrpGen m = UrpGen (lift m)
 
-runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,UrpState)
-runUrpGen f m = runStateT (unUrpGen m) (defState f)
+runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,Urp)
+runUrpGen f m = runStateT (unUrpGen m) (defUrp f)
 
 tempPrefix :: File -> String
 tempPrefix f = manglePath $ topRel f where
@@ -231,23 +232,22 @@ line s = tell (s++"\n")
 urweb = makevar "URWEB" "urweb"
 uwinclude = makevar "UWINCLUDE" "-I$(shell $(URWEB) -print-cinclude)"
 uwincludedir = makevar "UWINCLUDEDIR" "$(shell $(URWEB) -print-cinclude)/.."
-gcc = makevar "UWCC" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=gcc)"
-gxx = makevar "UWCPP" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=g++)"
+uwcc = makevar "UWCC" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=gcc)"
+uwxx = makevar "UWCPP" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=g++)"
 uwcflags = extvar "UWCFLAGS"
 
 uwlib :: File -> UrpGen (Make' IO) () -> Make UWLib
 uwlib urpfile m = do
-  ((),s) <- runUrpGen urpfile m
-  let u@(Urp tgt _ hdr mod srcs ptch dbs) = urpst s
+  ((),u@(Urp tgt _ hdr mod srcs ptch dbs prereq uag)) <- runUrpGen urpfile m
   let pkgcfg = (urpPkgCfg u)
 
   os <- forM srcs $ \(SrcFile src cfl lfl) -> do
     let cflags = string $ concat $ cfl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
     o <- (case takeExtension src of
       ".cpp" -> do
-        rule' $ shell1 [cmd| $gxx -c $uwcflags $uwinclude $cflags -o @(src .= "o") $src |]
+        rule' $ shell1 [cmd| $uwxx -c $uwcflags $uwinclude $cflags -o @(src .= "o") $src |]
       ".c" -> do
-        rule' $ shell1 [cmd| $gcc -c $uwinclude $uwcflags $cflags -o @(src .= "o") $src |]
+        rule' $ shell1 [cmd| $uwcc -c $uwinclude $uwcflags $cflags -o @(src .= "o") $src |]
       e -> fail ("Source type not supported (by extension) " ++ (topRel src)))
     return $ UrpLink (snd o) lfl
 
@@ -271,6 +271,7 @@ uwlib urpfile m = do
     when (not $ null ptch) $ do
       shell [cmd| cat $ptch >> @urpfile |] >> return ()
     shell [cmd| cat $urp2 >> @urpfile |]
+    depend prereq
 
   return $ UWLib u
 
@@ -291,6 +292,7 @@ uwapp flags urpfile m = do
     shell [cmd|C_INCLUDE_PATH=$(uwincludedir) $(urweb) $(string flags) $uwflags $(string urparg) |]
   return $ UWExe u
 
+
 uwapp_postgres :: File -> UrpGen (Make' IO) () -> (Make UWExe, Make File)
 uwapp_postgres f m = (app,db) where
   dbn = (takeBaseName f)
@@ -308,16 +310,16 @@ uwapp_postgres f m = (app,db) where
     return fdb
 
 addHdr :: (Monad m) => UrpHdrToken -> UrpGen m ()
-addHdr h = modify $ \s -> let u = urpst s in s { urpst = u { uhdr = (uhdr u) ++ [h] } }
+addHdr h = modify $ \u -> u { uhdr = (uhdr u) ++ [h] }
 
 addSrc :: (Monad m) => SrcFile -> UrpGen m ()
-addSrc f = modify $ \s -> let u = urpst s in s { urpst = u { srcs = f : (srcs u) } }
+addSrc f = modify $ \u -> u { srcs = f : (srcs u) }
 
 addPatch :: (Monad m) => File -> UrpGen m ()
-addPatch f = modify $ \s -> let u = urpst s in s { urpst = u { patches = f : (patches u) } }
+addPatch f = modify $ \u -> u { patches = f : (patches u) }
 
 database :: (Monad m) => String -> UrpGen m ()
-database dbs = modify $ \s -> let u = urpst s in s { urpst = u { dbstr = Just (DBString dbs) } }
+database dbs = modify $ \u -> u { dbstr = Just (DBString dbs) }
 
 allow :: (Monad m) => UrpAllow -> String -> UrpGen m ()
 allow a s = addHdr $ UrpAllow a s
@@ -390,7 +392,7 @@ externalMake2 f = externalMake' ((takeDirectory f </> takeFileName f) .= "mk") f
 
 
 addMod :: (Monad m) => UrpModToken -> UrpGen m ()
-addMod m = modify $ \s -> let u = urpst s in s { urpst = u { umod = (umod u) ++ [m] } }
+addMod m = modify $ \u -> u { umod = (umod u) ++ [m] }
 
 class ModuleDecl x where
   ur :: (Monad m) => x -> UrpGen m ()
@@ -507,7 +509,7 @@ embed' ueo' js_ffi f = do
   rule' $ do
     shell [cmd|mkdir -p $(string $ topRel a) 2>/dev/null|]
     shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
-  o <- snd `liftM` (rule' $ shell1 [cmd| $gcc -c $uwinclude -o @(c .= "o") $c |])
+  o <- snd `liftM` (rule' $ shell1 [cmd| $uwcc -c $uwinclude -o @(c .= "o") $c |])
   ffi s
   include h
   link o

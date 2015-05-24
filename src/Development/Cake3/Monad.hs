@@ -197,11 +197,11 @@ type A a = A' (Make' IO) a
 
 -- | A class of monads providing access to the underlying A monad. It tells
 -- Haskell how to do a convertion: given a . (A' m) -> a
-class (Monad m, Monad a) => MonadAction a m | a -> m where
-  liftAction :: A' m x -> a x
+-- class (Monad m, Monad a) => MonadAction a m | a -> m where
+--   liftAction :: A' m x -> a x
 
-instance (Monad m) => MonadAction (A' m) m where
-  liftAction = id
+-- instance (Monad m) => MonadAction (A' m) m where
+--   liftAction = id
 
 -- | Fill recipe @r using the action @act by running the action monad
 runA' :: (Monad m) => Recipe -> A' m a -> m (Recipe, a)
@@ -259,7 +259,7 @@ readFileForMake :: (MonadMake m)
 readFileForMake f = liftMake (addMakeDep f >> liftIO (BS.readFile (topRel f)))
 
 -- | CommandGen is a recipe-builder packed in the newtype to prevent partial
--- expantion of it's commands
+-- expansion of it's commands
 newtype CommandGen' m = CommandGen' { unCommand :: A' m Command }
 type CommandGen = CommandGen' (Make' IO)
 
@@ -342,64 +342,56 @@ instance (RefOutput m File) => RefOutput m (m File) where
 
 -- | Class of things which may be referenced using '\$(expr)' syntax of the
 -- quasy-quoted shell expressions
-class (MonadAction a m) => RefInput a m x where
+class (Monad a) => RefInput a x where
   -- | Register the input item, return it's shell-script representation
   refInput :: x -> a Command
 
-instance (MonadAction a m) => RefInput a m File where
-  refInput f = liftAction $ do
+instance (Monad m) => RefInput (A' m) File where
+  refInput f = do
     modify $ \r -> r { rsrc = f `S.insert` (rsrc r)}
     return_file f
 
--- instance (RefInput a m x) => RefInput a m (m x) where
---   refInput mx = liftAction (A' $ lift mx) >>= refInput
-
-instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
+instance (RefInput a x, MonadMake a) => RefInput a (Make x) where
   refInput mx = liftMake mx >>= refInput
 
-instance (MonadAction a m) => RefInput a m Recipe where
+instance (Monad m) => RefInput (A' m) Recipe where
   refInput r = refInput (rtgt r)
 
-instance (RefInput a m x) => RefInput a m [x] where
+instance (RefInput a x) => RefInput a [x] where
   refInput xs = spacify $ mapM refInput xs
 
-instance (MonadAction a m) => RefInput a m (Set File) where
+instance (RefInput a x) => RefInput a (Set x) where
   refInput xs = refInput (S.toList xs)
 
-instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
+instance (MonadIO a, RefInput a x) => RefInput a (IO x) where
   refInput mx = liftIO mx >>= refInput
 
--- instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
---   refInput mr = liftMake mr >>= refInput
+instance (RefInput a x) => RefInput a (Maybe x) where
+  refInput mx =
+    case mx of
+      Nothing -> return mempty
+      Just x -> refInput x
 
--- instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
---   refInput mx = liftMake mx >>= refInput
-
-instance (RefInput a m x) => RefInput a m (Maybe x) where
-  refInput mx = case mx of
-    Nothing -> return mempty
-    Just x -> refInput x
-
-instance (MonadAction a m) => RefInput a m Variable where
-  refInput v@(Variable n _) = liftAction $ do
+instance (Monad m) => RefInput (A' m) Variable where
+  refInput v@(Variable n _) = do
     variables [v]
     return_text $ printf "$(%s)" n
 
-instance (MonadAction a m) => RefInput a m Tool where
-  refInput t@(Tool x) = liftAction $ do
+instance (Monad m) => RefInput (A' m) Tool where
+  refInput t@(Tool x) = do
     tools [t]
     return_text x
 
-instance (MonadAction a m) => RefInput a m CakeString where
+instance (Monad m) => RefInput (A' m) CakeString where
   refInput v@(CakeString s) = do
     return_text s
 
-instance (MonadAction a m) => RefInput a m (CommandGen' m) where
-  refInput (CommandGen' a) = liftAction a
+instance (Monad m) => RefInput (A' m) (CommandGen' m) where
+  refInput (CommandGen' a) = a
 
 -- | Add it's argument to the list of dependencies (prerequsites) of a current
 -- recipe under construction
-depend :: (RefInput a m x)
+depend :: (RefInput a x)
   => x -- ^ File or [File] or (Set File) or other form of dependency.
   -> a ()
 depend x = refInput x >> return ()
