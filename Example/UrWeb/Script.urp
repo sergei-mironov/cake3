@@ -1,5 +1,0 @@
-ffi ./Script
-include ./Script.h
-link -L/nix/store/l19qlawm1r3spsn1d8h81i996sikfvbv-jansson-2.7/lib -ljansson 
-link ./Script.o
-
