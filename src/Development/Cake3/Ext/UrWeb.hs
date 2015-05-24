@@ -200,13 +200,11 @@ instance ToUrpLine UrpModToken where
 newtype UrpGen m a = UrpGen { unUrpGen :: StateT UrpState m a }
   deriving(Functor, Applicative, Monad, MonadState UrpState, MonadMake, MonadIO)
 
-
 class (Monad m, Monad m1) => MonadUrpGen m1 m where
   liftUrpGen :: m1 a -> m a
 
 instance (Monad m) => MonadUrpGen m (UrpGen m) where
   liftUrpGen m = UrpGen (lift m)
-
 
 runUrpGen :: (Monad m) => File -> UrpGen m a -> m (a,UrpState)
 runUrpGen f m = runStateT (unUrpGen m) (defState f)
@@ -232,6 +230,7 @@ line s = tell (s++"\n")
 
 urweb = makevar "URWEB" "urweb"
 uwinclude = makevar "UWINCLUDE" "-I$(shell $(URWEB) -print-cinclude)"
+uwincludedir = makevar "UWINCLUDEDIR" "$(shell $(URWEB) -print-cinclude)/.."
 gcc = makevar "UWCC" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=gcc)"
 gxx = makevar "UWCPP" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=g++)"
 uwcflags = extvar "UWCFLAGS"
@@ -289,7 +288,7 @@ uwapp flags urpfile m = do
       Just sql -> produce sql
     depend (makevar "UWVER" "$(shell $(URWEB) -version)")
     let urparg = topRel $ (takeDirectory urpfile)</>(takeBaseName urpfile)
-    shell [cmd|$(urweb) $(string flags) $uwflags $(string urparg) |]
+    shell [cmd|C_INCLUDE_PATH=$(uwincludedir) $(urweb) $(string flags) $uwflags $(string urparg) |]
   return $ UWExe u
 
 uwapp_postgres :: File -> UrpGen (Make' IO) () -> (Make UWExe, Make File)

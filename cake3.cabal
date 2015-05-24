@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                cake3
-version:             0.6.0
+version:             0.6.1
 synopsis:            Third cake the Makefile EDSL
 description:         Cake3 is a Makefile EDSL written in Haskell. Write your build logic in
                      Haskell, obtain clean and safe Makefile, distribute it to the end-users.

@@ -195,8 +195,8 @@ newtype A' m a = A' { unA' :: StateT Recipe m a }
 -- | Verison of Action monad with fixed parents
 type A a = A' (Make' IO) a
 
--- | A class of monads providing access to the underlying A monad. We assume
--- that (A' @m) is sitting somewhere inside @t
+-- | A class of monads providing access to the underlying A monad. It tells
+-- Haskell how to do a convertion: given a . (A' m) -> a
 class (Monad m, Monad a) => MonadAction a m | a -> m where
   liftAction :: A' m x -> a x
 
@@ -351,8 +351,11 @@ instance (MonadAction a m) => RefInput a m File where
     modify $ \r -> r { rsrc = f `S.insert` (rsrc r)}
     return_file f
 
-instance (RefInput a m x) => RefInput a m (m x) where
-  refInput mx = liftAction (A' $ lift mx) >>= refInput
+-- instance (RefInput a m x) => RefInput a m (m x) where
+--   refInput mx = liftAction (A' $ lift mx) >>= refInput
+
+instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
+  refInput mx = liftMake mx >>= refInput
 
 instance (MonadAction a m) => RefInput a m Recipe where
   refInput r = refInput (rtgt r)
@@ -366,8 +369,8 @@ instance (MonadAction a m) => RefInput a m (Set File) where
 instance (MonadIO a, RefInput a m x) => RefInput a m (IO x) where
   refInput mx = liftIO mx >>= refInput
 
-instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
-  refInput mr = liftMake mr >>= refInput
+-- instance (MonadAction a m, MonadMake a) => RefInput a m (Make Recipe) where
+--   refInput mr = liftMake mr >>= refInput
 
 -- instance (RefInput a m x, MonadMake a) => RefInput a m (Make x) where
 --   refInput mx = liftMake mx >>= refInput
