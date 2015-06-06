@@ -11,6 +11,7 @@ import Data.Attoparsec.Text
 import qualified Data.Text as T 
 import Data.Text (Text)
 import Data.Char
+import Data.List as L
 
 import Data.Monoid
 import Control.Applicative
@@ -75,7 +76,7 @@ getChunks i = case parseOnly parser (T.strip i) of
 
     parser :: Parser [Chunk]
     parser = fmap concat $ flip manyTill endOfInput $ do
-        text <- takeTill (\c -> elem c "@$")
+        text <- takeTill (\c -> elem c ("@$" :: String))
         end  <- atEnd
         if end
             then return [T text]
