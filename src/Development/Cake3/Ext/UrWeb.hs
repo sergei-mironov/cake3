@@ -94,7 +94,7 @@ instance (Monad m) => RefInput (A' m) UWExe where
 
 
 urpDeps :: Urp -> [File]
-urpDeps (Urp _ _ hdr mod srcs _ _ _ _) = foldl' scan2 (foldl' scan1 (foldl' scan3 mempty srcs) hdr) mod where
+urpDeps (Urp _ _ hdr mod srcs _ _ _ _) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
   scan1 a (UrpLink f _) = f:a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
@@ -102,7 +102,6 @@ urpDeps (Urp _ _ hdr mod srcs _ _ _ _) = foldl' scan2 (foldl' scan1 (foldl' scan
   scan2 a (UrpModule1 f) = f:a
   scan2 a (UrpModule2 f1 f2) = f1:f2:a
   scan2 a _ = a
-  scan3 a (SrcFile f _ _) = (f.="o"):a
 
 urpSql' :: Urp -> Maybe File
 urpSql' u = find (uhdr u) where
@@ -230,7 +229,7 @@ line :: (MonadWriter String m) => String -> m ()
 line s = tell (s++"\n")
 
 urweb = makevar "URWEB" "urweb"
-uwinclude = makevar "UWINCLUDE" "-I$(shell $(URWEB) -print-cinclude)"
+uwinclude = makevar "UWINCLUDE" "$(shell $(URWEB) -print-cinclude)"
 uwincludedir = makevar "UWINCLUDEDIR" "$(shell $(URWEB) -print-cinclude)/.."
 uwcc = makevar "UWCC" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=gcc)"
 uwxx = makevar "UWCPP" "$(shell $(shell $(URWEB) -print-ccompiler) -print-prog-name=g++)"
@@ -241,20 +240,18 @@ uwlib urpfile m = do
   ((),u@(Urp tgt _ hdr mod srcs ptch dbs prereq uag)) <- runUrpGen urpfile m
   let pkgcfg = (urpPkgCfg u)
 
-  os <- forM srcs $ \(SrcFile src cfl lfl) -> do
+  forM_ srcs $ \(SrcFile src cfl lfl) -> do
     let cflags = string $ concat $ cfl : map (\p -> printf "$(shell pkg-config --cflags %s) " p) (urpPkgCfg u)
-    o <- (case takeExtension src of
+    case takeExtension src of
       ".cpp" -> do
-        rule' $ shell1 [cmd| $uwxx -c $uwcflags $uwinclude $cflags -o @(src .= "o") $src |]
+        rule' $ shell1 [cmd| $uwxx -c $uwcflags -I$uwincludedir -I$uwinclude $cflags -o @(src .= "o") $src |]
       ".c" -> do
-        rule' $ shell1 [cmd| $uwcc -c $uwinclude $uwcflags $cflags -o @(src .= "o") $src |]
-      e -> fail ("Source type not supported (by extension) " ++ (topRel src)))
-    return $ UrpLink (snd o) lfl
+        rule' $ shell1 [cmd| $uwcc -c -I$uwincludedir -I$uwinclude $uwcflags $cflags -o @(src .= "o") $src |]
+      e -> fail ("Source type not supported (by extension) " ++ (topRel src))
 
   urp1 <- genIn (urpfile .= "in.1") (urpDeps u) $ do
     maybe (return ()) (line . toUrpLine tgt) dbs
     forM hdr (line . toUrpLine tgt)
-    forM os (line . toUrpLine tgt)
 
   urp2 <- genIn (urpfile .= "in.2") (urpDeps u) $ do
     line ""
@@ -434,7 +431,9 @@ class SrcDecl x where
   src :: (MonadMake m) => x -> UrpGen m ()
 
 instance SrcDecl (File,String,String) where
-  src (f,cfl,lfl) = addSrc $ SrcFile f cfl lfl
+  src (f,cfl,lfl) = do
+    addSrc $ SrcFile f cfl lfl
+    link (f .= "o", lfl)
 
 instance SrcDecl File where
   src f = src (f,"","")
@@ -509,7 +508,7 @@ embed' ueo' js_ffi f = do
   rule' $ do
     shell [cmd|mkdir -p $(string $ topRel a) 2>/dev/null|]
     shell [cmd|$urembed $(string ueo) -c @c -H @h -s @s -w @w $j $f > @p|]
-  o <- snd `liftM` (rule' $ shell1 [cmd| $uwcc -c $uwinclude -o @(c .= "o") $c |])
+  o <- snd `liftM` (rule' $ shell1 [cmd| $uwcc -c -I$uwinclude -o @(c .= "o") $c |])
   ffi s
   include h
   link o
