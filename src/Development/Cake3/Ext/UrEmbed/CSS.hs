@@ -91,5 +91,5 @@ parse_css inp =
               let (h, t) = span (\c -> not $ elem c "?#") u
               let mn = guessModName h
               tell [ mn ]
-              return $ pack ("url('/" ++ mn ++ "/" ++ urblobfun ++ t ++ "')"))
+              return $ pack ("url('/" ++ mn ++ "/content" ++ t ++ "')"))
 
