@@ -39,7 +39,8 @@ module ${1}_P(
   cake3,
   cakegen,
   urembed,
-  caketools
+  caketools,
+  cwd
   ) where
 
 import Control.Monad.Trans
@@ -60,6 +61,9 @@ pl = ModuleLocation t2m m2t
 
 file :: String -> File
 file x = file' pl x
+
+cwd :: CakeString
+cwd = string t2m
 
 projectroot :: FilePath
 projectroot = "$TOP"
