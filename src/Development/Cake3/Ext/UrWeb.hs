@@ -96,6 +96,7 @@ instance (Monad m) => RefInput (A' m) UWExe where
 urpDeps :: Urp -> [File]
 urpDeps (Urp _ _ hdr mod srcs _ _ _ _) = foldl' scan2 (foldl' scan1 mempty hdr) mod where
   scan1 a (UrpLink f _) = f:a
+  scan1 a (UrpFile _ f) = f:a
   scan1 a (UrpInclude f) = f:a
   scan1 a (UrpLibrary f) = f:a
   scan1 a _ = a
