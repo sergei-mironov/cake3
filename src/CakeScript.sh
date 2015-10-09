@@ -72,7 +72,7 @@ moduleroot :: FilePath
 moduleroot = "$2"
 
 cakefiles :: [File]
-cakefiles = 
+cakefiles =
   let rl = ModuleLocation t2m m2t in
   case "$2" of
     "$TOP" -> map (file' rl) ($3)
@@ -116,7 +116,7 @@ CAKEDIR=""
 
 while test -n "$1" ; do
   case "$1" in
-    --help|-h|help) 
+    --help|-h|help)
       err "Cake3 the Makefile generator"
       err "$CAKEURL"
       err "Usage: cake3 [--help|-h] [-C DIR] [init] args"
@@ -166,7 +166,7 @@ IFS=$'\n'
 CAKES=`cakes`
 CAKELIST="[]"
 for f in $CAKES ; do
-  CAKELIST="\"$f\" : $CAKELIST" 
+  CAKELIST="\"$f\" : $CAKELIST"
 done
 
 MAIN_=

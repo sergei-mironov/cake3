@@ -20,10 +20,10 @@ filterExts exts files = filter (\f -> or $ map (isExt f) exts) files where
   sureDot e@('.':cs) = e
   sureDot e@(c:cs) = '.':e
 
--- FIMXE: Find a way to record dependencies like
+-- FIMXE: Find a way to record dependencies
 -- FIXME: Figure out how to add ./relative notation (./file instead of file)
 -- Makefile : contents_of(directory)
-getDirectoryContentsRecursive :: (MonadIO m) => File -> m [File]
+getDirectoryContentsRecursive :: (MonadIO m, Eq x, Show x) => FileT x FilePath -> m [FileT x FilePath]
 getDirectoryContentsRecursive td@(FileT _ topdir) = map (td</>) `liftM` (liftIO $ recurseDirectories [""])
   where
     recurseDirectories :: [FilePath] -> IO [FilePath]
@@ -47,4 +47,4 @@ getDirectoryContentsRecursive td@(FileT _ topdir) = map (td</>) `liftM` (liftIO 
         ignore ['.']      = True
         ignore ['.', '.'] = True
         ignore _          = False
- 
+

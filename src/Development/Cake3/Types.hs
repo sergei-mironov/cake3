@@ -55,7 +55,7 @@ data Flag = Phony | Intermediate
 -- required to build former from latter
 data Recipe = Recipe {
     rtgt :: Set File
-  -- ^ Targets 
+  -- ^ Targets
   , rsrc :: Set File
   -- ^ Prerequisites
   , rcmd :: [Command]
@@ -94,7 +94,7 @@ flattern :: [Set x] -> [x]
 flattern = concat . map S.toList
 
 applyPlacement' :: (Eq x) => [File] -> Map File x  -> [x]
-applyPlacement' pl m = 
+applyPlacement' pl m =
   let placed = nub $ catMaybes $ L.map (\k -> M.lookup k m) pl
       all = L.map snd $ M.toList m
   in placed ++ (all \\ placed)
@@ -151,7 +151,7 @@ var :: String -> Maybe String -> Variable
 var n v = Variable n v
 
 intermediateFiles :: (Foldable t) => t Recipe -> Set File
-intermediateFiles rs = 
+intermediateFiles rs =
   execWriter $ do
     forM_ rs $ \r -> do
       when (not $ Phony `S.member` (rflags r)) $ do

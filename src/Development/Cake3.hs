@@ -33,7 +33,7 @@ module Development.Cake3 (
   , ignoreDepends
   , prebuild
   , postbuild
-  
+
   -- Files
   , FileLike(..)
   , File
