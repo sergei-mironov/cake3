@@ -194,10 +194,12 @@ type File = FileT ModuleLocation FilePath
 file' :: ModuleLocation -> FilePath -> File
 file' pl f = FileT pl f
 
+-- | Adds './' before the path, marking it as relative
 dottify :: FilePath -> FilePath
 dottify = addDot . F.normalise where
   addDot "." = "."
   addDot p@('.':'.':_) = p
+  addDot ('/':_) = error "dottify: error, trying to cast absolute path to relative"
   addDot p = "."</>p
 
 topRel :: File -> FilePath
