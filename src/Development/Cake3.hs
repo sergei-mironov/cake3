@@ -222,6 +222,9 @@ genFile f c = genFile' f c (return ())
 --   shell [cmd| $(tool "touch") -c @f|]
 --   return f
 
+-- FIXME: leads to doeble-checkout when used more than once. Introduce
+-- @file@ -> .git dependency,
+-- checkout the submodule in .git's recipe
 gitSubmoduleFile :: File -> Make File
 gitSubmoduleFile file = rule $
   let
