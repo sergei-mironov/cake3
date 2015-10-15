@@ -60,7 +60,7 @@ module Development.Cake3 (
   , currentDirLocation
 
   -- Git
-  , checkoutGitSubmodule
+  , gitSubmoduleFile
 
   -- Import several essential modules
   , module Data.String
@@ -215,12 +215,24 @@ genFile f c = genFile' f c (return ())
 -- genTmpFileWithPrefix :: (MonadMake m) => String -> String -> m File
 -- genTmpFileWithPrefix pfx cnt = tmpFile pfx >>= \f -> genFile f cnt
 
-checkoutGitSubmodule :: File -> Make File
-checkoutGitSubmodule f = rule $ do
-  shell [cmd| $(tool "git") -C $(fileModule f) submodule update --init |]
-  shell [cmd| $(tool "git") -C $(fileModule f) checkout -f |]
-  shell [cmd| $(tool "touch") -c @f|]
-  return f
+-- checkoutGitSubmoduleFile :: File -> Make File
+-- checkoutGitSubmoduleFile f = rule $ do
+--   shell [cmd| $(tool "git") -C $(fileModule f) submodule update --init |]
+--   shell [cmd| $(tool "git") -C $(fileModule f) checkout -f |]
+--   shell [cmd| $(tool "touch") -c @f|]
+--   return f
+
+gitSubmoduleFile :: File -> Make File
+gitSubmoduleFile file = rule $
+  let
+    fm = fileModule file
+  in do
+  when ((splitDirectories (topRel fm)) /= ["."]) $ do
+    shell [cmd| $(tool "git") -C $fm submodule update --init |]
+    shell [cmd| $(tool "git") -C $fm checkout -f |]
+    return ()
+  shell [cmd| $(tool "touch") -c @(file)|]
+  return file
 
 --
 -- TESTS
