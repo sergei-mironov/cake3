@@ -31,7 +31,7 @@ import Development.Cake3.Monad
 
 class ToMakeText x where
   toMakeText :: x -> String
-  
+
 instance ToMakeText [Char] where
   toMakeText = id
 
@@ -47,7 +47,7 @@ instance ToMakeText CommandPiece where
 
 instance ToMakeText (Set File) where
   toMakeText s = intercalate " " (map toMakeText (S.toList s))
- 
+
 smap f = map f . S.toList
 
 line :: (MonadState String m) => String -> m ()

@@ -34,6 +34,7 @@ module ${1}_P(
   selfUpdate,
   writeDefaultMakefiles,
   filterDirectoryContentsRecursive,
+  subproject,
 
   -- tools
   cake3,
@@ -47,6 +48,7 @@ import Control.Monad.Trans
 import Control.Monad.State
 import Development.Cake3
 import Development.Cake3.Monad
+import Development.Cake3.Types
 import Development.Cake3.Ext.UrWeb
 import Development.Cake3.Utils.Slice
 import Development.Cake3.Utils.Find
@@ -62,6 +64,7 @@ pl = ModuleLocation t2m m2t
 file :: String -> File
 file x = file' pl x
 
+-- | FIXME: remove this
 cwd :: CakeString
 cwd = string t2m
 
@@ -70,6 +73,9 @@ projectroot = "$TOP"
 
 moduleroot :: FilePath
 moduleroot = "$2"
+
+subproject :: FilePath -> ModuleLocation
+subproject f = ModuleLocation (t2m </> f) ((wayback f) </> m2t)
 
 cakefiles :: [File]
 cakefiles =

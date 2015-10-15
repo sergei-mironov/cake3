@@ -36,7 +36,9 @@ module Development.Cake3 (
 
   -- Files
   , FileLike(..)
+  , FileT(..)
   , File
+  , ModuleLocation(..)
   , file'
   , (.=)
   , (</>)
@@ -55,8 +57,10 @@ module Development.Cake3 (
   , tool
   , CommandGen'(..)
   , make
-  , ModuleLocation(..)
   , currentDirLocation
+
+  -- Git
+  , checkoutGitSubmodule
 
   -- Import several essential modules
   , module Data.String
@@ -177,8 +181,8 @@ rule act = snd `liftM` withPlacement (rule' act)
 -- rule' :: (MonadMake m) => A a -> m a
 -- rule' act = liftMake $ snd <$> withPlacement (rule2 act)
 
--- | Build a rule for creating file @tgt with a fixed content @cnt, use
--- additional actions @a for the recipe
+-- | Build a rule for creating file @tgt@ with a fixed content @cnt@, use
+-- additional actions @act@ for the recipe
 genFile' :: File -> String -> A () -> Make File
 genFile' tgt cnt act =
   rule $ do
@@ -199,7 +203,7 @@ genFile' tgt cnt act =
       | not (isAlphaNum x) = '\\':x:(quote cs)
       | otherwise = x : (quote cs)
 
--- | See @genFile'
+-- | Similar to @genFile' with empty additional action
 genFile :: File -> String -> Make File
 genFile f c = genFile' f c (return ())
 
@@ -211,7 +215,12 @@ genFile f c = genFile' f c (return ())
 -- genTmpFileWithPrefix :: (MonadMake m) => String -> String -> m File
 -- genTmpFileWithPrefix pfx cnt = tmpFile pfx >>= \f -> genFile f cnt
 
-
+checkoutGitSubmodule :: File -> Make File
+checkoutGitSubmodule f = rule $ do
+  shell [cmd| $(tool "git") -C $(fileModule f) submodule update --init |]
+  shell [cmd| $(tool "git") -C $(fileModule f) checkout -f |]
+  shell [cmd| $(tool "touch") -c @f|]
+  return f
 
 --
 -- TESTS
@@ -224,14 +233,7 @@ genFile f c = genFile' f c (return ())
 --     shell [cmd|cp $(snd a) @(file "b")|]
 --   return ()
 --   where
---     file = file' (ProjectLocation "." ".") 
-
-
-
-
-
-
-
+--     file = file' (ProjectLocation "." ".")
 
 
 

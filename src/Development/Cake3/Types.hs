@@ -191,8 +191,14 @@ type File = FileT ModuleLocation FilePath
 -- | Converts string representation of Path into type-safe File. Internally,
 -- files are stored in a form of offset from module root directory, plus the
 -- path from top-level dir to module root and back (see @ModuleLocation@)
+--
+-- TODO: rename to mkFile
 file' :: ModuleLocation -> FilePath -> File
 file' pl f = FileT pl f
+
+-- | Path to the module, which have originally declared the @file@
+fileModule :: File -> File
+fileModule file@(FileT ml _) = file' ml "."
 
 -- | Adds './' before the path, marking it as relative
 dottify :: FilePath -> FilePath
@@ -202,12 +208,16 @@ dottify = addDot . F.normalise where
   addDot ('/':_) = error "dottify: error, trying to cast absolute path to relative"
   addDot p = "."</>p
 
+-- | Returns the path to the file, relative to the top-level directory (the
+-- place, where the target Makefile is located)
 topRel :: File -> FilePath
 topRel (FileT (ModuleLocation t2m m2t) path) = dottify $ t2m </> path
 
+-- | Converts path @x@ to the back-path, consisting of '..' directories
 wayback :: FilePath -> FilePath
 wayback x = F.joinPath $ map (const "..") $ filter (/= ".") $ F.splitDirectories $ F.takeDirectory x
 
+-- | Returns path from file @s@ to @t@, via the top-level directory
 route :: File -> File -> FilePath
 route s@(FileT myloc mypath) t@(FileT hisloc hispath)
   | myloc == hisloc = dottify $ (wayback mypath) </> hispath

@@ -167,7 +167,7 @@ evalMake mf mk = do
 modifyLoc f = modify $ \ms -> ms { sloc = f (sloc ms) }
 
 addRecipe :: Recipe -> Make ()
-addRecipe r = modify $ \ms -> 
+addRecipe r = modify $ \ms ->
   let rs = recipes ms ; k = rtgt r
   in ms { recipes = (S.insert r (recipes ms)) }
 
@@ -234,7 +234,7 @@ markPhony :: (Monad m) => A' m ()
 markPhony = modify $ \r -> r { rflags = S.insert Phony (rflags r) }
 
 -- | Adds the phony target for a rule. Typical usage:
--- 
+--
 -- > rule $ do
 -- >  phony "clean"
 -- >  unsafeShell [cmd|rm $elf $os $d|]
@@ -460,7 +460,7 @@ cmd = QuasiQuoter
   , quoteDec  = undefined
   , quoteExp = \s -> appE [| \x -> CommandGen' x |] (qqact s)
   } where
-    qqact s = 
+    qqact s =
       let chunks = flip map (getChunks (STR.fromString s)) $ \c ->
                      case c of
                        T t -> let t' = T.unpack t in [| return_text t' |]
