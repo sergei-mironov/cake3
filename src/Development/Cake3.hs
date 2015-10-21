@@ -226,16 +226,22 @@ genFile f c = genFile' f c (return ())
 -- @file@ -> .git dependency,
 -- checkout the submodule in .git's recipe
 gitSubmoduleFile :: File -> Make File
-gitSubmoduleFile file = rule $
+gitSubmoduleFile file =
   let
-    fm = fileModule file
-  in do
-  when ((splitDirectories (topRel fm)) /= ["."]) $ do
-    shell [cmd| $(tool "git") -C $fm submodule update --init |]
-    shell [cmd| $(tool "git") -C $fm checkout -f |]
-    return ()
-  shell [cmd| $(tool "touch") -c @(file)|]
-  return file
+    fm = (fileModule file)
+    dotgit = fm </> ".git"
+  in
+  rule $ do
+    depend $ do
+      rule $ do
+        when ((splitDirectories (topRel fm)) /= ["."]) $ do
+          shell [cmd| $(tool "git") -C $fm submodule update --init |]
+          shell [cmd| $(tool "git") -C $fm checkout -f |]
+          return ()
+        shell [cmd| $(tool "touch") -c @(dotgit)|]
+
+    shell [cmd| $(tool "touch") -c @(file)|]
+    return file
 
 --
 -- TESTS

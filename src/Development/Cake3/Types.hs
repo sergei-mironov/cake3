@@ -196,7 +196,7 @@ type File = FileT ModuleLocation FilePath
 file' :: ModuleLocation -> FilePath -> File
 file' pl f = FileT pl f
 
--- | Path to the module, which have originally declared the @file@
+-- | Path to the module (a directory), which have originally declared the @file@
 fileModule :: File -> File
 fileModule file@(FileT ml _) = file' ml "."
 

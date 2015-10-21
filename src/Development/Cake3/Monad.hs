@@ -396,7 +396,7 @@ depend :: (RefInput a x)
   -> a ()
 depend x = refInput x >> return ()
 
--- | Declare that current recipe produces some producable item.
+-- | Declare that current recipe produces item @x@.
 produce :: (RefOutput m x)
   => x -- ^ File or [File] or other form of target.
   -> A' m ()
