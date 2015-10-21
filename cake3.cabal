@@ -91,7 +91,7 @@ executable cake3
 executable cake3-scan
   hs-source-dirs:    app
   main-is:           CakeScan/Main.hs
-  build-depends:     base >=4.7, process, cake3, filepath
+  build-depends:     base >=4.7, process, cake3, filepath, directory
 
 executable urembed
   hs-source-dirs:    src
