@@ -15,9 +15,7 @@ import Data.List as L
 
 import Data.Monoid
 import Control.Applicative
-                        
-instance Lift Text where
-    lift = litE . stringL . T.unpack
+
 
 -- | Chunk is a part of quasy-quotation
 data Chunk 
