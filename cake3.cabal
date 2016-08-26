@@ -77,7 +77,8 @@ library
                      filepath, containers, text, monadloc, mtl >= 2.2.1,
                      bytestring, deepseq, system-filepath, text-format,
                      directory, attoparsec, mime-types,
-                     language-javascript, syb, parsec, process
+                     language-javascript < 0.6,
+                     syb, parsec, process
 
   hs-source-dirs:    src
   ghc-options:       -fwarn-incomplete-patterns
