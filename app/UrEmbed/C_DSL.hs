@@ -25,7 +25,7 @@ blk :: BlockLike a => [a] -> CStat
 blk = hBlock
 
 mk_out_c :: String
-mk_out_c = 
+mk_out_c =
   let
     blob =  ty "uw_Basis_blob"
     context =  ty "uw_context"

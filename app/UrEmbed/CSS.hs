@@ -64,17 +64,17 @@ transform_css = do
     funs = many (try fun1)
 
     l =  P.makeTokenParser $ P.LanguageDef
-        { P.commentStart	 = "/*"
-        , P.commentEnd	 = "*/"
-        , P.commentLine	 = "//"
+        { P.commentStart = "/*"
+        , P.commentEnd = "*/"
+        , P.commentLine = "//"
         , P.nestedComments = True
-        , P.identStart	 = P.letter
-        , P.identLetter	 = P.alphaNum <|> oneOf "_@-"
-        , P.reservedNames   = []
+        , P.identStart = P.letter
+        , P.identLetter = P.alphaNum <|> oneOf "_@-"
+        , P.reservedNames = []
         , P.reservedOpNames = []
-        , P.caseSensitive  = False
-        , P.opStart        = l
-        , P.opLetter       = l
+        , P.caseSensitive = False
+        , P.opStart = l
+        , P.opLetter = l
         }
         where l = oneOf ":!#$%&*+./<=>?@\\^|-~"
 

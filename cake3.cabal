@@ -72,6 +72,40 @@ library
                      Development.Cake3.Utils.Find
                      Development.Cake3.Utils.Slice
                      Text.QuasiMake
+
+  build-depends:     base >=4.7, haskell-src-meta, template-haskell,
+                     filepath, containers, text, monadloc, mtl >= 2.2.1,
+                     bytestring, deepseq, system-filepath, text-format,
+                     directory, attoparsec, mime-types, syb, parsec, process
+
+  hs-source-dirs:    src
+  ghc-options:       -fwarn-incomplete-patterns
+
+executable cake3
+  hs-source-dirs:    src
+  main-is:           CakeScript.hs
+  build-depends:     base >=4.7, process
+  other-modules:     Paths_cake3
+
+executable cake3-scan
+  hs-source-dirs:    app/CakeScan
+  main-is:           Main.hs
+  build-depends:     base >=4.7, process, cake3, filepath, directory
+
+executable urembed
+  hs-source-dirs:    app/UrEmbed
+  main-is:           Main.hs
+  build-depends:     base >= 4.7, mtl >= 2.2.1 , process,
+                     filepath, syb, optparse-applicative, directory,
+                     text, bytestring, containers,
+                     haskell-src-meta, template-haskell, attoparsec, monadloc,
+                     mime-types, parsec, transformers, utf8-string,
+                     blaze-builder, array
+  other-modules:     C
+                     C_DSL
+                     CSS
+                     JS
+                     Types
                      Language.JavaScript.Parser
                      Language.JavaScript.Parser.Parser
                      Language.JavaScript.Parser.Lexer
@@ -84,34 +118,4 @@ library
                      Language.JavaScript.Parser.ParserMonad
                      Language.JavaScript.Parser.StringEscape
                      Language.JavaScript.Parser.Token
-
-  build-depends:     base >=4.7, haskell-src-meta, template-haskell,
-                     filepath, containers, text, monadloc, mtl >= 2.2.1,
-                     bytestring, deepseq, system-filepath, text-format,
-                     directory, attoparsec, mime-types, syb, parsec, process,
-                     blaze-builder, utf8-string, array
-
-  hs-source-dirs:    src
-  ghc-options:       -fwarn-incomplete-patterns
-
-executable cake3
-  hs-source-dirs:    src
-  main-is:           CakeScript.hs
-  build-depends:     base >=4.7, process
-  other-modules:     Paths_cake3
-
-executable cake3-scan
-  hs-source-dirs:    app
-  main-is:           CakeScan/Main.hs
-  build-depends:     base >=4.7, process, cake3, filepath, directory
-
-executable urembed
-  hs-source-dirs:    app/UrEmbed
-  main-is:           app/UrEmbed/Main.hs
-  build-depends:     base >= 4.7, mtl >= 2.2.1 , process,
-                     filepath, syb, optparse-applicative, directory,
-                     text, bytestring, containers,
-                     haskell-src-meta, template-haskell, attoparsec, monadloc,
-                     mime-types, parsec, transformers, cake3, utf8-string, blaze-builder
-  other-modules:     Paths_cake3
 
