@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                cake3
-version:             0.6.3
+version:             0.6.5
 synopsis:            Third cake the Makefile EDSL
 description:         Cake3 is a Makefile EDSL written in Haskell. Write your build logic in
                      Haskell, obtain clean and safe Makefile, distribute it to the end-users.
@@ -84,18 +84,18 @@ library
 executable cake3
   hs-source-dirs:    src
   main-is:           CakeScript.hs
-  build-depends:     base >=4.7, process
+  build-depends:     base >=4.7 && < 5 , process
   other-modules:     Paths_cake3
 
 executable cake3-scan
   hs-source-dirs:    app/CakeScan
   main-is:           Main.hs
-  build-depends:     base >=4.7, process, cake3, filepath, directory
+  build-depends:     base >=4.7 && < 5 , process, cake3, filepath, directory
 
 executable urembed
   hs-source-dirs:    app/UrEmbed
   main-is:           Main.hs
-  build-depends:     base >= 4.7, mtl >= 2.2.1 , process,
+  build-depends:     base >= 4.7 && < 5 , mtl >= 2.2.1 , process,
                      filepath, syb, optparse-applicative, directory,
                      text, bytestring, containers,
                      haskell-src-meta, template-haskell, attoparsec, monadloc,
