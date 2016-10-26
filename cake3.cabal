@@ -72,12 +72,24 @@ library
                      Development.Cake3.Utils.Find
                      Development.Cake3.Utils.Slice
                      Text.QuasiMake
+                     Language.JavaScript.Parser
+                     Language.JavaScript.Parser.Parser
+                     Language.JavaScript.Parser.Lexer
+                     Language.JavaScript.Parser.Grammar5
+                     Language.JavaScript.Parser.AST
+                     Language.JavaScript.Pretty.Printer
+                     Language.JavaScript.Parser.SrcLocation
+                     Language.JavaScript.Parser.LexerUtils
+                     Language.JavaScript.Parser.ParseError
+                     Language.JavaScript.Parser.ParserMonad
+                     Language.JavaScript.Parser.StringEscape
+                     Language.JavaScript.Parser.Token
 
   build-depends:     base >=4.7, haskell-src-meta, template-haskell,
                      filepath, containers, text, monadloc, mtl >= 2.2.1,
                      bytestring, deepseq, system-filepath, text-format,
-                     directory, attoparsec, mime-types,
-                     language-javascript, syb, parsec, process
+                     directory, attoparsec, mime-types, syb, parsec, process,
+                     blaze-builder, utf8-string, array
 
   hs-source-dirs:    src
   ghc-options:       -fwarn-incomplete-patterns
@@ -94,12 +106,12 @@ executable cake3-scan
   build-depends:     base >=4.7, process, cake3, filepath, directory
 
 executable urembed
-  hs-source-dirs:    src
-  main-is:           Development/Cake3/Ext/UrEmbed/Main.hs
-  build-depends:     base >= 4.7, mtl >= 2.2.1 , language-javascript, process,
+  hs-source-dirs:    app/UrEmbed
+  main-is:           app/UrEmbed/Main.hs
+  build-depends:     base >= 4.7, mtl >= 2.2.1 , process,
                      filepath, syb, optparse-applicative, directory,
-                     text, bytestring, containers, language-javascript,
+                     text, bytestring, containers,
                      haskell-src-meta, template-haskell, attoparsec, monadloc,
-                     mime-types, parsec, transformers
+                     mime-types, parsec, transformers, cake3, utf8-string, blaze-builder
   other-modules:     Paths_cake3
 
