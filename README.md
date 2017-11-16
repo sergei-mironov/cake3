@@ -3,13 +3,13 @@ Cake3
 
 Cake3 is a EDSL for building Makefiles, written in Haskell. With cake3,
 developer can write their build logic in Haskell, obtain clean and safe Makefile
-and distribute it among the non-Haskell-aware users. Currenly, GNU Make is
+and distribute it among the non-Haskell-aware users. Currently, GNU Make is
 the only backend supported.
 
 The Goals
 ---------
 
-Make is a build tool which was created more than 20 yesrs ago. It has a number
+Make is a build tool which was created more than 20 years ago. It has a number
 of versions and dialects. Basic Makefiles are really easy to write and
 understand.  Unfortunately, it is hard to write real-world scale set of rules
 correctly due to tricky syntax and lots of pitfails. As of today, Make has
@@ -235,7 +235,7 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
             shell [cmd|build an app with $lib |]
 
     A/Cakefile.hs and do whatever you want to. Resulting makefiles will always
-    be monolitic.
+    be monolithic.
 
   * *Cake3 may generate different versions of Makefile at once*
 
@@ -249,7 +249,7 @@ resulting Makefiles safe and robust enough for, say, package maintainers.
 
 #### Make syntax
 
-As a summary - only a samll subset of Make syntax is supported.  For complex
+As a summary - only a small subset of Make syntax is supported.  For complex
 algorithms Haskell looks more suitable so implement everything you need inside
 the Cakefile.hs. In particular:
 
@@ -263,11 +263,11 @@ the Cakefile.hs. In particular:
 #### General
 
   * Resulting Makefile is actually a GNUMakefile. GNU extensions (shell function
-    and others) are needed to make various tricks to work. Also, posix
+    and others) are needed to make various tricks to work. Also, POSIX
     environment with coreututils package is required. So, Linux, Probably Mac,
     Probably Windows+Cygwin are the platforms which run cake3.
   * All Cakefiles across the project tree should have unique names in order to
-    be copied. Duplicates are found, the first one is used
+    be copied. Duplicates are found, the first one is used.
 
 Random implementation details
 -----------------------------
