@@ -16,3 +16,4 @@ tags
 *.in
 *.exe
 test/*
+result

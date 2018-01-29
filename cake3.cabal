@@ -100,7 +100,7 @@ executable urembed
                      text, bytestring, containers,
                      haskell-src-meta, template-haskell, attoparsec, monadloc,
                      mime-types, parsec, transformers, utf8-string,
-                     blaze-builder, array
+                     blaze-builder, array, pretty, c-dsl
   other-modules:     C
                      C_DSL
                      CSS
